@@ -19,7 +19,7 @@ AM_PROG_CC_C_O
 
 AS_ALL_LINGUAS
 IT_PROG_INTLTOOL([0.40], [no-xml])
-GETTEXT_PACKAGE=libsocialweb
+GETTEXT_PACKAGE=libsocialweb-extra-plugins
 AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE, "$GETTEXT_PACKAGE", [The name of the gettext package.])
 AC_SUBST(GETTEXT_PACKAGE)
 AM_GLIB_GNU_GETTEXT
@@ -60,7 +60,7 @@ SOCIALWEB_ENABLE_SERVICE(Plurk, plurk, PLURK)
 servicesdir='${libdir}'/libsocialweb/services
 AC_SUBST(servicesdir)
 
-servicesdatadir='${pkgdatadir}'/services
+servicesdatadir='${datadir}'/libsocialweb/services
 AC_SUBST(servicesdatadir)
 
 SHAVE_INIT([build-aux],[enable])
