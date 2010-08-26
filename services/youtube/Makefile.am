@@ -1,7 +1,7 @@
 services_LTLIBRARIES = libyoutube.la
 libyoutube_la_SOURCES = module.c youtube.c youtube.h
-libyoutube_la_CFLAGS = -I$(top_srcdir) $(REST_CFLAGS) $(GCONF_CFLAGS) $(DBUS_GLIB_CFLAGS) -DG_LOG_DOMAIN=\"Youtube\"
-libyoutube_la_LIBADD = $(top_builddir)/libsocialweb/libsocialweb.la $(top_builddir)/libsocialweb-keystore/libsocialweb-keystore.la $(top_builddir)/libsocialweb-keyfob/libsocialweb-keyfob.la $(REST_LIBS) $(GCONF_LIBS) $(DBUS_GLIB_LIBS)
+libyoutube_la_CFLAGS = $(LIBSOCIWEB_MODULE_CFLAGS) $(LIBSOCIWEB_KEYFOB_CFLAGS) $(LIBSOCIWEB_KEYSTORE_CFLAGS) $(REST_CFLAGS) $(GCONF_CFLAGS) $(DBUS_GLIB_CFLAGS) -DG_LOG_DOMAIN=\"Youtube\"
+libyoutube_la_LIBADD = $(LIBSOCIWEB_MODULE_LIBS) $(LIBSOCIWEB_KEYFOB_LIBS) $(LIBSOCIWEB_KEYSTORE_LIBS) $(REST_LIBS) $(GCONF_LIBS) $(DBUS_GLIB_LIBS)
 libyoutube_la_LDFLAGS = -module -avoid-version
 
 dist_servicesdata_DATA = youtube.png

@@ -17,17 +17,17 @@ AC_ISC_POSIX
 AC_HEADER_STDC
 AM_PROG_CC_C_O
 
-#AS_ALL_LINGUAS
-#IT_PROG_INTLTOOL([0.40], [no-xml])
-#GETTEXT_PACKAGE=libsocialweb
-#AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE, "$GETTEXT_PACKAGE", [The name of the gettext package.])
-#AC_SUBST(GETTEXT_PACKAGE)
-#AM_GLIB_GNU_GETTEXT
+AS_ALL_LINGUAS
+IT_PROG_INTLTOOL([0.40], [no-xml])
+GETTEXT_PACKAGE=libsocialweb
+AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE, "$GETTEXT_PACKAGE", [The name of the gettext package.])
+AC_SUBST(GETTEXT_PACKAGE)
+AM_GLIB_GNU_GETTEXT
 
 #AC_PATH_PROG([GLIB_GENMARSHAL], [glib-genmarshal])
 
 # TODO add po files
-#INTLTOOL_SOCIALWEB_KEYS='%.keys: %.keys.in $(INTLTOOL_MERGE) $(wildcard $(top_srcdir)/po/*.po) ; LC_ALL=C $(INTLTOOL_MERGE) -d -u -c $(top_builddir)/po/.intltool-merge-cache $(top_srcdir)/po $< [$]@'
+INTLTOOL_SOCIALWEB_KEYS='%.keys: %.keys.in $(INTLTOOL_MERGE) $(wildcard $(top_srcdir)/po/*.po) ; LC_ALL=C $(INTLTOOL_MERGE) -d -u -c $(top_builddir)/po/.intltool-merge-cache $(top_srcdir)/po $< [$]@'
 AC_SUBST(INTLTOOL_SOCIALWEB_KEYS)
 
 # TODO: bit nasty, should we use gnome-common?
@@ -49,6 +49,7 @@ PKG_CHECK_MODULES(PANGO, pango)
 PKG_CHECK_MODULES(JSON_GLIB, json-glib-1.0)
 PKG_CHECK_MODULES(LIBSOCIWEB_MODULE, libsocialweb-module >= 0.24.9)
 PKG_CHECK_MODULES(LIBSOCIWEB_KEYFOB, libsocialweb-keyfob >= 0.24.9)
+PKG_CHECK_MODULES(LIBSOCIWEB_KEYFOB, libsocialweb-keystore >= 0.24.9)
 
 #SOCIALWEB_ENABLE_SERVICE(Digg, digg, DIGG)
 #OCIALWEB_ENABLE_SERVICE(MySpace, myspace, MYSPACE)
@@ -72,4 +73,5 @@ AC_OUTPUT([
         services/dummy/Makefile
         services/youtube/Makefile
         services/plurk/Makefile
+	po/Makefile.in
 ])

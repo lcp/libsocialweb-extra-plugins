@@ -460,7 +460,7 @@ construct_user_data (SwServicePlurk* plurk, JsonNode *root)
 
   uid = g_strdup_printf ("%lld", id);
 
-  priv->user_id = uid;
+  priv->user_id = (char *) uid;
   priv->image_url = construct_image_url (uid, avatar, has_profile);
 }
 
