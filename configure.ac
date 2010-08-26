@@ -57,10 +57,10 @@ PKG_CHECK_MODULES(LIBSOCIWEB_KEYFOB, libsocialweb-keystore >= 0.24.9)
 SOCIALWEB_ENABLE_SERVICE(Youtube, youtube, YOUTUBE)
 SOCIALWEB_ENABLE_SERVICE(Plurk, plurk, PLURK)
 
-servicesdir='${libdir}'/libsocialweb/services
+servicesdir=`pkg-config --variable=servicesdir libsocialweb-module`
 AC_SUBST(servicesdir)
 
-servicesdatadir='${datadir}'/libsocialweb/services
+servicesdatadir=`pkg-config --variable=servicesdatadir libsocialweb-module`
 AC_SUBST(servicesdatadir)
 
 SHAVE_INIT([build-aux],[enable])
