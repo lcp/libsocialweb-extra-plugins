@@ -24,8 +24,6 @@ AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE, "$GETTEXT_PACKAGE", [The name of the gettext
 AC_SUBST(GETTEXT_PACKAGE)
 AM_GLIB_GNU_GETTEXT
 
-#AC_PATH_PROG([GLIB_GENMARSHAL], [glib-genmarshal])
-
 # TODO add po files
 INTLTOOL_SOCIALWEB_KEYS='%.keys: %.keys.in $(INTLTOOL_MERGE) $(wildcard $(top_srcdir)/po/*.po) ; LC_ALL=C $(INTLTOOL_MERGE) -d -u -c $(top_builddir)/po/.intltool-merge-cache $(top_srcdir)/po $< [$]@'
 AC_SUBST(INTLTOOL_SOCIALWEB_KEYS)
@@ -44,16 +42,12 @@ PKG_CHECK_MODULES(GCONF, gconf-2.0)
 PKG_CHECK_MODULES(SOUP, libsoup-2.4 gthread-2.0)
 PKG_CHECK_MODULES(DBUS_GLIB, dbus-glib-1)
 PKG_CHECK_MODULES(REST, rest-0.6 rest-extras-0.6)
-#PKG_CHECK_MODULES(KEYRING, gnome-keyring-1)
 PKG_CHECK_MODULES(PANGO, pango)
 PKG_CHECK_MODULES(JSON_GLIB, json-glib-1.0)
 PKG_CHECK_MODULES(LIBSOCIWEB_MODULE, libsocialweb-module >= 0.24.9)
 PKG_CHECK_MODULES(LIBSOCIWEB_KEYFOB, libsocialweb-keyfob >= 0.24.9)
 PKG_CHECK_MODULES(LIBSOCIWEB_KEYFOB, libsocialweb-keystore >= 0.24.9)
 
-#SOCIALWEB_ENABLE_SERVICE(Digg, digg, DIGG)
-#OCIALWEB_ENABLE_SERVICE(MySpace, myspace, MYSPACE)
-#SOCIALWEB_ENABLE_SERVICE(Facebook, facebook, FACEBOOK)
 SOCIALWEB_ENABLE_SERVICE(Youtube, youtube, YOUTUBE)
 SOCIALWEB_ENABLE_SERVICE(Plurk, plurk, PLURK)
 
