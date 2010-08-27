@@ -238,8 +238,8 @@ plurk_cb (RestProxyCall *call,
 
   for (list=plurks_ids; list ;list = g_list_next (list)) {
     JsonObject *plurk, *user;
-    char *uid, *pid, *url, *date, *base36;
-    const char *name, *content, *qualifier;
+    char *uid, *pid, *url, *date, *base36, *content;
+    const char *name, *qualifier;
     gint64 id, avatar, has_profile;
     SwItem *item;
 
@@ -263,8 +263,8 @@ plurk_cb (RestProxyCall *call,
     if (!user)
       continue;
 
-    /* put authorid */
-    sw_item_put (item, "authorid", uid);
+    /* authorid */
+    sw_item_take (item, "authorid", uid);
 
     /* Construct the id of sw_item */
     id = json_object_get_int_member (plurk, "plurk_id");
@@ -286,10 +286,10 @@ plurk_cb (RestProxyCall *call,
       qualifier = json_object_get_string_member (plurk, "qualifier_translated");
     else
       qualifier = json_object_get_string_member (plurk, "qualifier");
-    content = g_strdup_printf ("%s : %s",
+    content = g_strdup_printf ("%s %s",
                                qualifier,
                                json_object_get_string_member (plurk, "content_raw"));
-    sw_item_put (item, "content", content);
+    sw_item_take (item, "content", content);
 
     /* Get the post date of this plurk*/
     date = make_date (json_object_get_string_member (plurk, "posted"));
@@ -299,7 +299,7 @@ plurk_cb (RestProxyCall *call,
     base36 = base36_encode (pid);
     url = g_strconcat ("http://www.plurk.com/p/", base36, NULL);
     g_free (base36);
-    sw_item_put (item, "url", url);
+    sw_item_take (item, "url", url);
 
     /* Add the item into the set */
     sw_set_add (set, G_OBJECT (item));
