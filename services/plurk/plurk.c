@@ -311,6 +311,7 @@ plurk_cb (RestProxyCall *call,
 
   g_list_free (plurks_ids);
   g_object_unref (parser);
+  g_object_unref (call);
 }
 
 static void
