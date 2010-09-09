@@ -280,6 +280,7 @@ plurk_cb (RestProxyCall *call,
     has_profile = json_object_get_int_member (user, "has_profile_image");
     url = construct_image_url (uid, avatar, has_profile);
     sw_item_request_image_fetch (item, FALSE, "authoricon", url);
+    g_free (url);
 
     /* Construct the content of the plurk*/
     if (json_object_has_member (plurk, "qualifier_translated"))
