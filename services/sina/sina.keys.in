@@ -5,7 +5,7 @@ Link=http://t.sina.com.cn
 AuthType=oauth
 
 [OAuth]
-BaseURL=http://api.t.sina.com.cn/
+BaseURL=http://api.t.sina.com.cn/oauth/
 RequestTokenFunction=request_token
 AuthoriseFunction=authorize
 AccessTokenFunction=access_token
