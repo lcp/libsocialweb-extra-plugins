@@ -507,7 +507,6 @@ online_notify (gboolean online, gpointer user_data)
   SwServicePlurkPrivate *priv = GET_PRIVATE (plurk);
 
   if (online) {
-    /* Whatever have to do while online */
     if (priv->username && priv->password) {
       RestProxyCall *call;
 
@@ -528,15 +527,13 @@ online_notify (gboolean online, gpointer user_data)
       sw_service_emit_refreshed ((SwService *)plurk, NULL);
     }
   } else {
-    /* Whatever have to do while offline */
     if (priv->proxy) {
       g_object_unref (priv->proxy);
       priv->proxy = NULL;
     }
-    if (priv->user_id) {
-      g_free (priv->user_id);
-      priv->user_id = NULL;
-    }
+
+    g_free (priv->user_id);
+    priv->user_id = NULL;
 
     priv->credentials = OFFLINE;
 
@@ -594,17 +591,10 @@ sw_service_plurk_finalize (GObject *object)
   /* Free private variables*/
   SwServicePlurkPrivate *priv = SW_SERVICE_PLURK (object)->priv;
 
-  if (priv->user_id)
-    g_free (priv->user_id);
-
-  if (priv->image_url)
-    g_free (priv->image_url);
-
-  if (priv->username)
-    g_free (priv->username);
-
-  if (priv->password)
-    g_free (priv->password);
+  g_free (priv->user_id);
+  g_free (priv->image_url);
+  g_free (priv->username);
+  g_free (priv->password);
 
   G_OBJECT_CLASS (sw_service_plurk_parent_class)->finalize (object);
 }
