@@ -1,0 +1,12 @@
+[LibSocialWebService]
+_Name=Sina
+_Description=Sina microblog
+Link=http://t.sina.com.cn
+AuthType=oauth
+
+[OAuth]
+BaseURL=http://api.t.sina.com.cn/
+RequestTokenFunction=request_token
+AuthoriseFunction=authorize
+AccessTokenFunction=access_token
+Callback=oob
