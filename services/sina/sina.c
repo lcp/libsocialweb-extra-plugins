@@ -11,7 +11,6 @@
 #include <libsocialweb/sw-debug.h>
 #include <libsocialweb-keyfob/sw-keyfob.h>
 #include <libsocialweb-keystore/sw-keystore.h>
-#include <gconf/gconf-client.h>
 #include <rest/oauth-proxy.h>
 #include <rest/oauth-proxy-call.h>
 #include <rest/rest-xml-parser.h>
@@ -231,7 +230,7 @@ _populate_set_from_node (SwService   *service,
   }
 }
 
-static void _get_user_status_updates (SwServiceSina *service, SwSet *set);
+static void _get_user_status_updates (SwServiceSina *sina, SwSet *set);
 
 static void
 _got_user_status_cb (RestProxyCall *call,
@@ -292,10 +291,10 @@ _got_friends_status_cb (RestProxyCall *call,
 }
 
 static void
-_get_user_status_updates (SwServiceSina *service,
+_get_user_status_updates (SwServiceSina *sina,
                           SwSet         *set)
 {
-  SwServiceSinaPrivate *priv = GET_PRIVATE (service);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
   RestProxyCall *call;
 
   call = rest_proxy_new_call (priv->proxy);
@@ -303,14 +302,14 @@ _get_user_status_updates (SwServiceSina *service,
   rest_proxy_call_add_params(call,
                              "count", "10",
                              NULL);
-  rest_proxy_call_async (call, _got_user_status_cb, (GObject*)service, set, NULL);
+  rest_proxy_call_async (call, _got_user_status_cb, (GObject*)sina, set, NULL);
 }
 
 static void
-_get_friends_status_update (SwServiceSina *service,
+_get_friends_status_update (SwServiceSina *sina,
                             SwSet         *set)
 {
-  SwServiceSinaPrivate *priv = GET_PRIVATE (service);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
   RestProxyCall *call;
 
   call = rest_proxy_new_call (priv->proxy);
@@ -318,7 +317,7 @@ _get_friends_status_update (SwServiceSina *service,
   rest_proxy_call_add_params(call,
                              "count", "10",
                              NULL);
-  rest_proxy_call_async (call, _got_friends_status_cb, (GObject*)service, set, NULL);
+  rest_proxy_call_async (call, _got_friends_status_cb, (GObject*)sina, set, NULL);
 }
 
 static void
@@ -620,7 +619,6 @@ query_iface_init (gpointer g_iface,
                                       _sina_query_open_view);
 }
 
-/* Avatar interface */
 /* Avatar interface */
 static void
 _requested_avatar_downloaded_cb (const gchar *uri,
