@@ -50,6 +50,7 @@ PKG_CHECK_MODULES(LIBSOCIWEB_KEYSTORE, libsocialweb-keystore >= 0.24.9)
 
 SOCIALWEB_ENABLE_SERVICE(Youtube, youtube, YOUTUBE)
 SOCIALWEB_ENABLE_SERVICE(Plurk, plurk, PLURK)
+SOCIALWEB_ENABLE_SERVICE(Sina, sina, SINA)
 
 servicesdir=`pkg-config --variable=servicesdir libsocialweb-module`
 AC_SUBST(servicesdir)
@@ -67,5 +68,6 @@ AC_OUTPUT([
         services/dummy/Makefile
         services/youtube/Makefile
         services/plurk/Makefile
+        services/sina/Makefile
 	po/Makefile.in
 ])
