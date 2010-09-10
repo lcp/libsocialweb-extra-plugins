@@ -50,16 +50,10 @@ struct _SwServiceSinaPrivate {
     FRIENDS,
     BOTH
   } type;
-  enum {
-    OFFLINE,
-    CREDS_INVALID,
-    CREDS_VALID
-  } credentials;
   gboolean running;
   RestProxy *proxy;
   char *user_id;
   char *image_url;
-  /* TODO What else? */
 };
 
 static void online_notify (gboolean online, gpointer user_data);
@@ -127,7 +121,6 @@ get_static_caps (SwService *service)
     CAN_VERIFY_CREDENTIALS,
     CAN_UPDATE_STATUS,
     CAN_REQUEST_AVATAR,
-    CAN_GEOTAG,
     NULL
   };
 
@@ -137,15 +130,10 @@ get_static_caps (SwService *service)
 static const char **
 get_dynamic_caps (SwService *service)
 {
-  SwServiceSinaPrivate *priv = GET_PRIVATE (service);
+  SwServiceSinaPrivate *priv = SW_SERVICE_SINA (service)->priv;
   static const char *no_caps[] = { NULL };
   static const char *configured_caps[] = {
     IS_CONFIGURED,
-    NULL
-  };
-  static const char *invalid_caps[] = {
-    IS_CONFIGURED,
-    CREDENTIALS_INVALID,
     NULL
   };
   static const char *full_caps[] = {
@@ -155,20 +143,22 @@ get_dynamic_caps (SwService *service)
     CAN_REQUEST_AVATAR,
     NULL
   };
-  static const char *full_caps_with_geotag[] = {
-    IS_CONFIGURED,
-    CREDENTIALS_VALID,
-    CAN_UPDATE_STATUS,
-    CAN_REQUEST_AVATAR,
-    CAN_GEOTAG,
-    NULL
-  };
+  const char *key = NULL, *secret = NULL;
+  gboolean configured = FALSE;
+  RestProxy *proxy;
 
-  /* Check the conditions and determine which caps array to return */
+  if (priv->user_id)
+    return full_caps;
 
-  /* Just in case we fell through that switch */
-  g_warning ("Unhandled credential state %d", priv->credentials);
-  return no_caps;
+  sw_keystore_get_key_secret ("sina", &key, &secret);
+  proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
+  configured = sw_keyfob_oauth_check_credential ((OAuthProxy *)proxy);
+  g_object_unref (proxy);
+
+  if (configured)
+    return configured_caps;
+  else
+    return no_caps;
 }
 
 static void
@@ -584,10 +574,6 @@ sw_service_sina_initable (GInitable    *initable,
                          "No API key configured");
     return FALSE;
   }
-
-  priv->credentials = OFFLINE;
-
-  /* TODO what else? */
 
   sw_online_add_notify (online_notify, sina);
 
