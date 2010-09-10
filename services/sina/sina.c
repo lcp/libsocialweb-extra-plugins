@@ -194,7 +194,6 @@ _populate_set_from_node (SwService   *service,
                          SwSet       *set,
                          RestXmlNode *root)
 {
-  SwServiceSinaPrivate *priv = SW_SERVICE_SINA (service)->priv;
   RestXmlNode *node;
 
   if (!root)
@@ -276,6 +275,8 @@ _got_friends_status_cb (RestProxyCall *call,
                         gpointer       userdata)
 {
   SwService *service = SW_SERVICE (weak_object);
+  SwServiceSina *sina = SW_SERVICE_SINA (service);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
   RestXmlNode *root;
   SwSet *set = (SwSet *)userdata;
 
@@ -290,7 +291,7 @@ _got_friends_status_cb (RestProxyCall *call,
 
   if (priv->type == BOTH)
   {
-    _get_user_status_updates (myspace, set);
+    _get_user_status_updates (sina, set);
     return;
   }
 
@@ -304,12 +305,11 @@ static void
 _get_user_status_updates (SwServiceSina *service,
                           SwSet         *set)
 {
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (service);
   RestProxyCall *call;
-  char *function;
 
   call = rest_proxy_new_call (priv->proxy);
-  rest_proxy_call_set_function (call, "statuses/user_timeline.xml")
+  rest_proxy_call_set_function (call, "statuses/user_timeline.xml");
   rest_proxy_call_add_params(call,
                              "count", "10",
                              NULL);
@@ -320,12 +320,11 @@ static void
 _get_friends_status_update (SwServiceSina *service,
                             SwSet         *set)
 {
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (service);
   RestProxyCall *call;
-  char *function;
 
   call = rest_proxy_new_call (priv->proxy);
-  rest_proxy_call_set_function (call, "statuses/friends_timeline.xml")
+  rest_proxy_call_set_function (call, "statuses/friends_timeline.xml");
   rest_proxy_call_add_params(call,
                              "count", "10",
                              NULL);
@@ -342,21 +341,23 @@ get_status_updates (SwServiceSina *sina)
 
   set = sw_item_set_new ();
 
-  if (sw_service_get_param ((SwService *)service, "own")) {
+  if (sw_service_get_param ((SwService *)sina, "own")) {
     priv->type = OWN;
-  } else if (sw_service_get_param ((SwService *)service, "friends")){
+  } else if (sw_service_get_param ((SwService *)sina, "friends")){
     priv->type = FRIENDS;
   } else {
     priv->type = BOTH;
   }
 
   if (priv->type == OWN) {
-    _get_user_status_updates (service, set);
+    _get_user_status_updates (sina, set);
   } else {
     /* For BOTH this triggers into user */
-    _get_friends_status_update (service, set);
+    _get_friends_status_update (sina, set);
   }
 }
+
+static void got_tokens_cb (RestProxy *proxy, gboolean authorised, gpointer user_data);
 
 static void
 refresh (SwService *service)
@@ -426,8 +427,8 @@ got_user_cb (RestProxyCall *call,
   if (!user_node)
     return;
 
-  priv->user_id = get_child_node_value (user, "id");
-  priv->image_url = get_child_node_value (user, "profile_image_url");
+  priv->user_id = get_child_node_value (user_node, "id");
+  priv->image_url = get_child_node_value (user_node, "profile_image_url");
 
   rest_xml_node_unref (root);
 
@@ -467,7 +468,7 @@ online_notify (gboolean online, gpointer user_data)
     const char *key = NULL, *secret = NULL;
     sw_keystore_get_key_secret ("sina", &key, &secret);
     priv->proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
-    sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, service);
+    sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, sina);
   } else {
     if (priv->proxy) {
       g_object_unref (priv->proxy);
@@ -480,8 +481,8 @@ online_notify (gboolean online, gpointer user_data)
     g_free (priv->image_url);
     priv->image_url = NULL;
 
-    sw_service_emit_capabilities_changed ((SwService *)service,
-                                          get_dynamic_caps ((SwService *)service));
+    sw_service_emit_capabilities_changed ((SwService *)sina,
+                                          get_dynamic_caps ((SwService *)sina));
   }
 }
 
@@ -524,9 +525,10 @@ sw_service_sina_dispose (GObject *object)
 static void
 sw_service_sina_finalize (GObject *object)
 {
-  /* Free private variables*/
-  g_free (user_id);
-  g_free (image_url);
+  SwServiceSinaPrivate *priv = SW_SERVICE_SINA (object)->priv;
+
+  g_free (priv->user_id);
+  g_free (priv->image_url);
 
   G_OBJECT_CLASS (sw_service_sina_parent_class)->finalize (object);
 }
@@ -572,7 +574,7 @@ sw_service_sina_initable (GInitable    *initable,
   const char *key = NULL, *secret = NULL;
 
   if (priv->inited)
-    return TURE;
+    return TRUE;
 
   sw_keystore_get_key_secret ("sina", &key, &secret);
   if (key == NULL || secret == NULL) {
@@ -608,11 +610,11 @@ _sina_query_open_view (SwQueryIface          *self,
                        GHashTable            *params,
                        DBusGMethodInvocation *context)
 {
-  SwServicePlurkPrivate *priv = GET_PRIVATE (self);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (self);
   SwItemView *item_view;
   const gchar *object_path;
 
-  item_view = g_object_new (SW_TYPE_PLURK_ITEM_VIEW,
+  item_view = g_object_new (SW_TYPE_SINA_ITEM_VIEW,
                             "proxy", priv->proxy,
                             "service", self,
                             NULL);
@@ -633,11 +635,23 @@ query_iface_init (gpointer g_iface,
 }
 
 /* Avatar interface */
+/* Avatar interface */
+static void
+_requested_avatar_downloaded_cb (const gchar *uri,
+                                 gchar       *local_path,
+                                 gpointer     userdata)
+{
+  SwService *service = SW_SERVICE (userdata);
+
+  sw_avatar_iface_emit_avatar_retrieved (service, local_path);
+  g_free (local_path);
+}
+
 static void
 _sina_avatar_request_avatar (SwAvatarIface         *self,
                              DBusGMethodInvocation *context)
 {
-  SwServicePlurkPrivate *priv = GET_PRIVATE (self);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (self);
 
   if (priv->image_url) {
     sw_web_download_image_async (priv->image_url,
@@ -683,7 +697,7 @@ _sina_status_update_update_status (SwStatusUpdateIface   *self,
                                    DBusGMethodInvocation *context)
 {
   SwServiceSina *sina = SW_SERVICE_SINA (self);
-  SwServicePlurkPrivate *priv = GET_PRIVATE (sina);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
   RestProxyCall *call;
 
   if (!priv->user_id)
