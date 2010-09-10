@@ -397,7 +397,7 @@ got_user_cb (RestProxyCall *call,
   SwServiceSina *sina = SW_SERVICE_SINA (service);
   SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
 
-  RestXmlNode *root, *status_node, *user_node;
+  RestXmlNode *root;
 
   if (error) {
     g_message ("Error: %s", error->message);
@@ -408,16 +408,8 @@ got_user_cb (RestProxyCall *call,
   if (!root)
     return;
 
-  status_node = rest_xml_node_find (root, "status");
-  if (!status_node)
-    return;
-
-  user_node = rest_xml_node_find (status_node, "user");
-  if (!user_node)
-    return;
-
-  priv->user_id = get_child_node_value (user_node, "id");
-  priv->image_url = get_child_node_value (user_node, "profile_image_url");
+  priv->user_id = get_child_node_value (root, "id");
+  priv->image_url = get_child_node_value (root, "profile_image_url");
 
   rest_xml_node_unref (root);
 
@@ -437,10 +429,7 @@ got_tokens_cb (RestProxy *proxy, gboolean authorised, gpointer user_data)
 
   if (authorised) {
     call = rest_proxy_new_call (priv->proxy);
-    rest_proxy_call_set_function (call, "statuses/user_timeline");
-    rest_proxy_call_add_params (call,
-                                "count", "1",
-                                NULL);
+    rest_proxy_call_set_function (call, "account/verify_credentials.xml");
     rest_proxy_call_async (call, got_user_cb, (GObject*)sina, NULL, NULL);
   } else {
     sw_service_emit_refreshed ((SwService *)sina, NULL);
