@@ -58,7 +58,7 @@ struct _SwServiceSinaPrivate {
 static void online_notify (gboolean online, gpointer user_data);
 static void credentials_updated (SwService *service);
 
-RestXmlNode *
+static RestXmlNode *
 node_from_call (RestProxyCall *call)
 {
   static RestXmlParser *parser = NULL;
