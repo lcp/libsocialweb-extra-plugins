@@ -11,8 +11,9 @@
 #include <libsocialweb/sw-debug.h>
 #include <libsocialweb-keyfob/sw-keyfob.h>
 #include <libsocialweb-keystore/sw-keystore.h>
-#include <rest/oauth-proxy.h>
-#include <rest/oauth-proxy-call.h>
+//#include <rest/oauth-proxy.h>
+//#include <rest/oauth-proxy-call.h>
+#include <gconf/gconf-client.h>
 #include <rest/rest-xml-parser.h>
 #include <libsoup/soup.h>
 
@@ -49,14 +50,81 @@ struct _SwServiceSinaPrivate {
     FRIENDS,
     BOTH
   } type;
+  enum {
+    OFFLINE,
+    CREDS_INVALID,
+    CREDS_VALID
+  } credentials;
   gboolean running;
   RestProxy *proxy;
-  char *user_id;
   char *image_url;
+  char *username, *password;
+  char *api_key;
+  char *authentication;
+  GConfClient *gconf;
+  guint gconf_notify_id[2];
 };
+
+#define KEY_BASE "/apps/libsocialweb/services/sina"
+#define KEY_USER KEY_BASE "/user"
+#define KEY_PASS KEY_BASE "/password"
 
 static void online_notify (gboolean online, gpointer user_data);
 static void credentials_updated (SwService *service);
+
+static void
+auth_changed_cb (GConfClient *client,
+                 guint        cnxn_id,
+                 GConfEntry  *entry,
+                 gpointer     user_data)
+{
+  SwService *service = SW_SERVICE (user_data);
+  SwServiceSina *sina = SW_SERVICE_SINA (service);
+  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
+  const char *username = NULL, *password = NULL;
+  gboolean updated = FALSE;
+
+  if (g_str_equal (entry->key, KEY_USER)) {
+    if (entry->value)
+      username = gconf_value_get_string (entry->value);
+    if (username && username[0] == '\0')
+      username = NULL;
+
+    if (g_strcmp0 (priv->username, username) != 0) {
+      priv->username = g_strdup (username);
+      updated = TRUE;
+    }
+  } else if (g_str_equal (entry->key, KEY_PASS)) {
+    if (entry->value)
+      password = gconf_value_get_string (entry->value);
+    if (password && password[0] == '\0')
+      password = NULL;
+
+    if (g_strcmp0 (priv->password, password) != 0) {
+      priv->password = g_strdup (password);
+      updated = TRUE;
+    }
+  }
+
+  if (updated)
+    credentials_updated (service);
+}
+
+static void
+sina_basic_auth_set_params (SwServiceSina *sina, RestProxyCall *call)
+{
+  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
+  char *basic_auth;
+
+  if (priv->authentication) {
+    basic_auth = g_strconcat ("Basic ", priv->authentication, NULL);
+    rest_proxy_call_add_header (call, "Authorization", basic_auth);
+    g_free (basic_auth);
+    rest_proxy_call_add_params (call,
+                                "source", priv->api_key,
+                                NULL);
+  }
+}
 
 static RestXmlNode *
 node_from_call (RestProxyCall *call)
@@ -135,6 +203,11 @@ get_dynamic_caps (SwService *service)
     IS_CONFIGURED,
     NULL
   };
+  static const char *invalid_caps[] = {
+    IS_CONFIGURED,
+    CREDENTIALS_INVALID,
+    NULL
+  };
   static const char *full_caps[] = {
     IS_CONFIGURED,
     CREDENTIALS_VALID,
@@ -142,22 +215,23 @@ get_dynamic_caps (SwService *service)
     CAN_REQUEST_AVATAR,
     NULL
   };
-  const char *key = NULL, *secret = NULL;
-  gboolean configured = FALSE;
-  RestProxy *proxy;
 
-  if (priv->user_id)
+  /* Check the conditions and determine which caps array to return */
+  switch (priv->credentials) {
+  case CREDS_VALID:
     return full_caps;
+  case CREDS_INVALID:
+    return invalid_caps;
+  case OFFLINE:
+    if (priv->username && priv->password)
+      return configured_caps;
+    else
+      return no_caps;
+  }
 
-  sw_keystore_get_key_secret ("sina", &key, &secret);
-  proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
-  configured = sw_keyfob_oauth_check_credential ((OAuthProxy *)proxy);
-  g_object_unref (proxy);
-
-  if (configured)
-    return configured_caps;
-  else
-    return no_caps;
+  /* Just in case we fell through that switch */
+  g_warning ("Unhandled credential state %d", priv->credentials);
+  return no_caps;
 }
 
 static void
@@ -224,6 +298,9 @@ _populate_set_from_node (SwService   *service,
     url = g_strconcat ("http://t.sina.com.cn/", uid, NULL);
     sw_item_take (item, "url", url);
     g_free (uid);
+
+    sw_set_add (set, G_OBJECT (item));
+    g_object_unref (item);
 
     /* Next node */
     node = node->next;
@@ -299,6 +376,7 @@ _get_user_status_updates (SwServiceSina *sina,
 
   call = rest_proxy_new_call (priv->proxy);
   rest_proxy_call_set_function (call, "statuses/user_timeline.xml");
+  sina_basic_auth_set_params (sina, call);
   rest_proxy_call_add_params(call,
                              "count", "10",
                              NULL);
@@ -314,6 +392,7 @@ _get_friends_status_update (SwServiceSina *sina,
 
   call = rest_proxy_new_call (priv->proxy);
   rest_proxy_call_set_function (call, "statuses/friends_timeline.xml");
+  sina_basic_auth_set_params (sina, call);
   rest_proxy_call_add_params(call,
                              "count", "10",
                              NULL);
@@ -326,7 +405,8 @@ get_status_updates (SwServiceSina *sina)
   SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
   SwSet *set;
 
-  g_assert (priv->user_id);
+  if (!priv->authentication)
+    return;
 
   set = sw_item_set_new ();
 
@@ -346,22 +426,14 @@ get_status_updates (SwServiceSina *sina)
   }
 }
 
-static void got_tokens_cb (RestProxy *proxy, gboolean authorised, gpointer user_data);
-
 static void
 refresh (SwService *service)
 {
   SwServiceSina *sina = SW_SERVICE_SINA (service);
   SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
 
-  if (!priv->running || !priv->proxy)
-    return;
-
-  if (priv->user_id == NULL) {
-    sw_keyfob_oauth ((OAuthProxy*)priv->proxy, got_tokens_cb, service);
-  } else {
+  if (priv->running && priv->proxy && priv->authentication)
     get_status_updates (sina);
-  }
 }
 
 static void
@@ -400,15 +472,19 @@ got_user_cb (RestProxyCall *call,
   RestXmlNode *root;
 
   if (error) {
+    priv->credentials = CREDS_INVALID;
     g_message ("Error: %s", error->message);
+    g_message ("Sina: %s", rest_proxy_call_get_payload (call));
     return;
   }
 
   root = node_from_call (call);
-  if (!root)
+  if (!root) {
+    priv->credentials = CREDS_INVALID;
     return;
+  }
 
-  priv->user_id = get_child_node_value (root, "id");
+  priv->credentials = CREDS_VALID;
   priv->image_url = get_child_node_value (root, "profile_image_url");
 
   rest_xml_node_unref (root);
@@ -421,43 +497,40 @@ got_user_cb (RestProxyCall *call,
 }
 
 static void
-got_tokens_cb (RestProxy *proxy, gboolean authorised, gpointer user_data)
+online_notify (gboolean online, gpointer user_data)
 {
   SwServiceSina *sina = SW_SERVICE_SINA (user_data);
   SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
   RestProxyCall *call;
 
-  if (authorised) {
-    call = rest_proxy_new_call (priv->proxy);
-    rest_proxy_call_set_function (call, "account/verify_credentials.xml");
-    rest_proxy_call_async (call, got_user_cb, (GObject*)sina, NULL, NULL);
-  } else {
-    sw_service_emit_refreshed ((SwService *)sina, NULL);
-  }
-}
-
-static void
-online_notify (gboolean online, gpointer user_data)
-{
-  SwServiceSina *sina = SW_SERVICE_SINA (user_data);
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
-
   if (online) {
-    const char *key = NULL, *secret = NULL;
-    sw_keystore_get_key_secret ("sina", &key, &secret);
-    priv->proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
-    sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, sina);
+    if (priv->username && priv->password) {
+      char *str = g_strconcat (priv->username, ":", priv->password, NULL);
+      priv->authentication = g_base64_encode (str, strlen (str));
+      g_free (str);
+
+      priv->proxy = rest_proxy_new ("http://api.t.sina.com.cn/", FALSE);
+      call = rest_proxy_new_call (priv->proxy);
+      rest_proxy_call_set_function (call, "account/verify_credentials.xml");
+      sina_basic_auth_set_params (sina, call);
+      rest_proxy_call_async (call, got_user_cb, (GObject*)sina, NULL, NULL);
+
+      priv->credentials = OFFLINE;
+    } else {
+      priv->credentials = OFFLINE;
+      sw_service_emit_refreshed ((SwService *)sina, NULL);
+    }
   } else {
     if (priv->proxy) {
       g_object_unref (priv->proxy);
       priv->proxy = NULL;
     }
 
-    g_free (priv->user_id);
-    priv->user_id = NULL;
-
     g_free (priv->image_url);
     priv->image_url = NULL;
+
+    g_free (priv->authentication);
+    priv->authentication = NULL;
 
     sw_service_emit_capabilities_changed ((SwService *)sina,
                                           get_dynamic_caps ((SwService *)sina));
@@ -497,6 +570,13 @@ sw_service_sina_dispose (GObject *object)
     priv->proxy = NULL;
   }
 
+  if (priv->gconf) {
+    gconf_client_notify_remove (priv->gconf, priv->gconf_notify_id[0]);
+    gconf_client_notify_remove (priv->gconf, priv->gconf_notify_id[1]);
+    g_object_unref (priv->gconf);
+    priv->gconf = NULL;
+  }
+
   G_OBJECT_CLASS (sw_service_sina_parent_class)->dispose (object);
 }
 
@@ -505,8 +585,11 @@ sw_service_sina_finalize (GObject *object)
 {
   SwServiceSinaPrivate *priv = SW_SERVICE_SINA (object)->priv;
 
-  g_free (priv->user_id);
   g_free (priv->image_url);
+  g_free (priv->username);
+  g_free (priv->password);
+  g_free (priv->api_key);
+  g_free (priv->authentication);
 
   G_OBJECT_CLASS (sw_service_sina_parent_class)->finalize (object);
 }
@@ -562,6 +645,30 @@ sw_service_sina_initable (GInitable    *initable,
                          "No API key configured");
     return FALSE;
   }
+
+  priv->api_key = g_strdup (key);
+
+  if (sw_service_get_param ((SwService *)sina, "own")) {
+    priv->type = OWN;
+  } else if (sw_service_get_param ((SwService *)sina, "friends")){
+    priv->type = FRIENDS;
+  } else {
+    priv->type = BOTH;
+  }
+
+  priv->credentials = OFFLINE;
+
+  priv->gconf = gconf_client_get_default ();
+  gconf_client_add_dir (priv->gconf, KEY_BASE,
+                        GCONF_CLIENT_PRELOAD_ONELEVEL, NULL);
+  priv->gconf_notify_id[0] = gconf_client_notify_add (priv->gconf, KEY_USER,
+                                                      auth_changed_cb, sina,
+                                                      NULL, NULL);
+  priv->gconf_notify_id[1] = gconf_client_notify_add (priv->gconf, KEY_PASS,
+                                                      auth_changed_cb, sina,
+                                                      NULL, NULL);
+  gconf_client_notify (priv->gconf, KEY_USER);
+  gconf_client_notify (priv->gconf, KEY_PASS);
 
   sw_online_add_notify (online_notify, sina);
 
@@ -673,12 +780,10 @@ _sina_status_update_update_status (SwStatusUpdateIface   *self,
   SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
   RestProxyCall *call;
 
-  if (!priv->user_id)
-    return;
-
   call = rest_proxy_new_call (priv->proxy);
   rest_proxy_call_set_method (call, "POST");
   rest_proxy_call_set_function (call, "statuses/update.xml");
+  sina_basic_auth_set_params (sina, call);
 
   rest_proxy_call_add_params (call,
                               "status", msg,
