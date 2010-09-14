@@ -245,11 +245,9 @@ start (SwService *service)
 static char*
 make_date (const char *s)
 {
-  /* TODO Take care of timezone */
-  /* Fri Dec 25 13:07:17 +0800 2009 */
-  struct tm tm;
-  strptime (s, "%A %h %d %T%Z %Y", &tm);
-  return sw_time_t_to_string (timegm (&tm));
+  struct tm tm = {0};
+  strptime (s, "%A %h %d %T %z %Y", &tm);
+  return sw_time_t_to_string (mktime (&tm));
 }
 
 static void
