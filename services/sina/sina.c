@@ -225,6 +225,9 @@ _populate_set_from_node (SwService   *service,
     sw_item_take (item, "url", url);
     g_free (uid);
 
+    sw_set_add (set, G_OBJECT (item));
+    g_object_unref (item);
+
     /* Next node */
     node = node->next;
   }
