@@ -1,6 +1,6 @@
 [LibSocialWebService]
 _Name=Sina
-_Description=Sina microblog
+_Description=Sina microblogging
 Link=http://t.sina.com.cn
 AuthType=oauth
 
