@@ -5,11 +5,11 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: libsocialweb-extra-plugins\n"
+"Project-Id-Version: libsocialweb extra plugins\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-11-01 10:56+0800\n"
-"PO-Revision-Date: 2010-11-01 11:00+0000\n"
-"Last-Translator: Gary Lin <glin@novell.com>\n"
+"POT-Creation-Date: 2010-11-01 11:06+0800\n"
+"PO-Revision-Date: 2010-11-01 11:10+0800\n"
+"Last-Translator: Gary Ching-Pang Lin <glin@novell.com>\n"
 "Language-Team: /n <glin@novell.com>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
@@ -22,6 +22,14 @@ msgstr "Plurk"
 #: ../services/plurk/plurk.keys.in.h:2
 msgid "Plurk is a web site that allows people to share ideas."
 msgstr "Plurk is a web site that allows people to share ideas."
+
+#: ../services/sina/sina.keys.in.h:1
+msgid "Sina"
+msgstr "Sina"
+
+#: ../services/sina/sina.keys.in.h:2
+msgid "Sina microblog"
+msgstr "Sina microblog"
 
 #: ../services/youtube/youtube.keys.in.h:1
 msgid "Youtube"
