@@ -2,11 +2,4 @@
 _Name=Sina
 _Description=Sina microblogging
 Link=http://t.sina.com.cn
-AuthType=oauth
-
-[OAuth]
-BaseURL=http://api.t.sina.com.cn/
-RequestTokenFunction=oauth/request_token
-AuthoriseFunction=oauth/authorize
-AccessTokenFunction=oauth/access_token
-Callback=oob
+AuthType=sina
