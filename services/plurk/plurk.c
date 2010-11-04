@@ -1,8 +1,12 @@
 #include <config.h>
+
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
-#include "plurk.h"
+#include <glib/gi18n.h>
+#include <dbus/dbus-glib-lowlevel.h>
+#include <gnome-keyring.h>
+
 #include <libsocialweb/sw-item.h>
 #include <libsocialweb/sw-set.h>
 #include <libsocialweb/sw-online.h>
@@ -11,7 +15,8 @@
 #include <libsocialweb/sw-debug.h>
 #include <libsocialweb-keyfob/sw-keyfob.h>
 #include <libsocialweb-keystore/sw-keystore.h>
-#include <gconf/gconf-client.h>
+#include <libsocialweb/sw-client-monitor.h>
+
 #include <rest/rest-xml-parser.h>
 #include <libsoup/soup.h>
 #include <json-glib/json-glib.h>
@@ -20,6 +25,7 @@
 #include <interfaces/sw-avatar-ginterface.h>
 #include <interfaces/sw-status-update-ginterface.h>
 
+#include "plurk.h"
 #include "plurk-item-view.h"
 
 static void initable_iface_init (gpointer g_iface, gpointer iface_data);
@@ -45,71 +51,19 @@ G_DEFINE_TYPE_WITH_CODE (SwServicePlurk,
 struct _SwServicePlurkPrivate {
   gboolean inited;
   enum {
-    OWN,
-    FRIENDS,
-    BOTH
-  } type;
-  enum {
     OFFLINE,
     CREDS_INVALID,
     CREDS_VALID
   } credentials;
-  gboolean running;
   RestProxy *proxy;
   char *user_id;
   char *image_url;
   char *username, *password;
   char *api_key;
-  GConfClient *gconf;
-  guint gconf_notify_id[2];
 };
-
-
-#define KEY_BASE "/apps/libsocialweb/services/plurk"
-#define KEY_USER KEY_BASE "/user"
-#define KEY_PASS KEY_BASE "/password"
 
 static void online_notify (gboolean online, gpointer user_data);
 static void credentials_updated (SwService *service);
-
-static void
-auth_changed_cb (GConfClient *client,
-                 guint        cnxn_id,
-                 GConfEntry  *entry,
-                 gpointer     user_data)
-{
-  SwService *service = SW_SERVICE (user_data);
-  SwServicePlurk *plurk = SW_SERVICE_PLURK (service);
-  SwServicePlurkPrivate *priv = GET_PRIVATE (plurk);
-  const char *username = NULL, *password = NULL;
-  gboolean updated = FALSE;
-
-  if (g_str_equal (entry->key, KEY_USER)) {
-    if (entry->value)
-      username = gconf_value_get_string (entry->value);
-    if (username && username[0] == '\0')
-      username = NULL;
-
-    if (g_strcmp0 (priv->username, username) != 0) {
-      priv->username = g_strdup (username);
-      updated = TRUE;
-    }
-  } else if (g_str_equal (entry->key, KEY_PASS)) {
-    if (entry->value)
-      password = gconf_value_get_string (entry->value);
-    if (password && password[0] == '\0')
-      password = NULL;
-
-    if (g_strcmp0 (priv->password, password) != 0) {
-      priv->password = g_strdup (password);
-      updated = TRUE;
-    }
-  }
-
-  if (updated)
-    credentials_updated (service);
-}
-
 
 static JsonNode *
 node_from_call (RestProxyCall *call, JsonParser *parser)
@@ -160,194 +114,19 @@ construct_image_url (const char *uid,
   return url;
 }
 
-static gchar *
-base36_encode (const gchar *source)
-{
-  gchar *encoded = NULL, *tmp, c;
-  gint64 dividend, quotient;
-  const gint64 divisor = 36;
-
-  dividend = g_ascii_strtoll (source, NULL, 10);
-
-  while (dividend > 0) {
-    quotient = dividend % divisor;
-    dividend = dividend / divisor;
-
-    if (quotient < 10)
-      c = '0' + quotient;
-    else
-      c = 'a' + quotient - 10;
-
-    if (encoded != NULL) {
-      tmp = g_strdup_printf ("%c%s", c, encoded);
-      g_free (encoded);
-      encoded = tmp;
-    } else {
-      encoded = g_strdup_printf ("%c", c);
-    }
-  }
-  return encoded;
-}
-
-static char *
-make_date (const char *s)
-{
-  struct tm tm;
-  strptime (s, "%A, %d %h %Y %H:%M:%S GMT", &tm);
-  return sw_time_t_to_string (timegm (&tm));
-}
-
-static void
-plurk_cb (RestProxyCall *call,
-          const GError  *error,
-          GObject       *weak_object,
-          gpointer       userdata)
-{
-  SwService *service = SW_SERVICE (weak_object);
-  JsonParser *parser = NULL;
-  JsonNode *root, *plurks, *plurk_users, *node;
-  JsonArray *j_array;
-  JsonObject *object;
-  SwSet *set;
-  GList *plurks_ids = NULL, *list = NULL;
-
-  if (error) {
-    g_message ("Error: %s", error->message);
-    g_message ("Error: %s", rest_proxy_call_get_payload(call));
-    return;
-  }
-
-  parser = json_parser_new ();
-
-  root = node_from_call (call, parser);
-  if (!root)
-    return;
-
-  object = json_node_get_object (root);
-  if (!json_object_has_member (object, "plurks") ||
-      !json_object_has_member (object, "plurk_users"))
-    return;
-
-  set = sw_item_set_new ();
-  plurks = json_object_get_member (object, "plurks");
-  plurk_users = json_object_get_member (object, "plurk_users");
-
-  /* Parser the data and file the set */
-  j_array = json_node_get_array (plurks);
-  plurks_ids = json_array_get_elements (j_array);
-
-  for (list=plurks_ids; list ;list = g_list_next (list)) {
-    JsonObject *plurk, *user;
-    char *uid, *pid, *url, *date, *base36, *content;
-    const char *name, *qualifier;
-    gint64 id, avatar, has_profile;
-    SwItem *item;
-
-    item = sw_item_new ();
-    sw_item_set_service (item, service);
-
-    /* Get the plurk object */
-    node = (JsonNode *) list->data;
-    plurk = json_node_get_object (node);
-
-    if (!json_object_has_member (plurk, "owner_id"))
-      continue;
-
-    /* Get the user object */
-    id = json_object_get_int_member (plurk, "owner_id");
-    uid = g_strdup_printf ("%lld", id);
-    object = json_node_get_object (plurk_users);
-    node = json_object_get_member (object, uid);
-    user = json_node_get_object (node);
-
-    if (!user)
-      continue;
-
-    /* authorid */
-    sw_item_take (item, "authorid", uid);
-
-    /* Construct the id of sw_item */
-    id = json_object_get_int_member (plurk, "plurk_id");
-    pid = g_strdup_printf ("%lld", id);
-    sw_item_take (item, "id", g_strconcat ("plurk-", pid, NULL));
-
-    /* Get the display name of the user */
-    name = json_object_get_string_member (user, "full_name");
-    sw_item_put (item, "author", name);
-
-    /* Construct the avatar url */
-    avatar = json_object_get_int_member (user, "avatar");
-    has_profile = json_object_get_int_member (user, "has_profile_image");
-    url = construct_image_url (uid, avatar, has_profile);
-    sw_item_request_image_fetch (item, FALSE, "authoricon", url);
-    g_free (url);
-
-    /* Construct the content of the plurk*/
-    if (json_object_has_member (plurk, "qualifier_translated"))
-      qualifier = json_object_get_string_member (plurk, "qualifier_translated");
-    else
-      qualifier = json_object_get_string_member (plurk, "qualifier");
-    content = g_strdup_printf ("%s %s",
-                               qualifier,
-                               json_object_get_string_member (plurk, "content_raw"));
-    sw_item_take (item, "content", content);
-
-    /* Get the post date of this plurk*/
-    date = make_date (json_object_get_string_member (plurk, "posted"));
-    sw_item_take (item, "date", date);
-
-    /* Construt the link of the user */
-    base36 = base36_encode (pid);
-    url = g_strconcat ("http://www.plurk.com/p/", base36, NULL);
-    g_free (base36);
-    sw_item_take (item, "url", url);
-
-    /* Add the item into the set */
-    sw_set_add (set, G_OBJECT (item));
-    g_object_unref (item);
-  }
-
-  if (!sw_set_is_empty (set))
-    sw_service_emit_refreshed ((SwService *)service, set);
-
-  g_list_free (plurks_ids);
-  g_object_unref (parser);
-  g_object_unref (call);
-}
-
-static void
-get_status_updates (SwServicePlurk *plurk)
-{
-  SwServicePlurkPrivate *priv = GET_PRIVATE (plurk);
-  RestProxyCall *call;
-
-  if (!priv->user_id || !priv->running)
-    return;
-
-  call = rest_proxy_new_call (priv->proxy);
-  switch (priv->type) {
-  case OWN:
-  case FRIENDS:
-  case BOTH:
-    rest_proxy_call_set_function (call, "Timeline/getPlurks");
-    break;
-  }
-
-  rest_proxy_call_add_params (call,
-                              "api_key", priv->api_key,
-                              "limit", "20",
-                              NULL);
-  rest_proxy_call_async (call, plurk_cb, (GObject*)plurk, NULL, NULL);
-}
-
 static const char **
 get_static_caps (SwService *service)
 {
   static const char * caps[] = {
     CAN_VERIFY_CREDENTIALS,
+    HAS_UPDATE_STATUS_IFACE,
+    HAS_AVATAR_IFACE,
+    HAS_BANISHABLE_IFACE,
+    HAS_QUERY_IFACE,
+
+    /* deprecated */
     CAN_UPDATE_STATUS,
     CAN_REQUEST_AVATAR,
-    CAN_GEOTAG,
     NULL
   };
 
@@ -395,47 +174,6 @@ get_dynamic_caps (SwService *service)
 }
 
 static void
-start (SwService *service)
-{
-  SwServicePlurk *plurk = (SwServicePlurk*)service;
-
-  plurk->priv->running = TRUE;
-}
-
-static void
-refresh (SwService *service)
-{
-  SwServicePlurk *plurk = (SwServicePlurk*)service;
-  SwServicePlurkPrivate *priv = GET_PRIVATE (plurk);
-
-  if (priv->running && priv->username && priv->password && priv->proxy)
-    get_status_updates (plurk);
-}
-
-static void
-avatar_downloaded_cb (const gchar *uri,
-                      gchar       *local_path,
-                      gpointer     userdata)
-{
-  SwService *service = SW_SERVICE (userdata);
-
-  sw_service_emit_avatar_retrieved (service, local_path);
-  g_free (local_path);
-}
-
-static void
-request_avatar (SwService *service)
-{
-  SwServicePlurkPrivate *priv = GET_PRIVATE (service);
-
-  if (priv->image_url) {
-    sw_web_download_image_async (priv->image_url,
-                                     avatar_downloaded_cb,
-                                     service);
-  }
-}
-
-static void
 construct_user_data (SwServicePlurk* plurk, JsonNode *root)
 {
   SwServicePlurkPrivate *priv = GET_PRIVATE (plurk);
@@ -467,10 +205,10 @@ construct_user_data (SwServicePlurk* plurk, JsonNode *root)
 }
 
 static void
-got_login_data (RestProxyCall *call,
-                const GError  *error,
-                GObject       *weak_object,
-                gpointer       userdata)
+_got_login_data (RestProxyCall *call,
+                 const GError  *error,
+                 GObject       *weak_object,
+                 gpointer       userdata)
 {
   SwService *service = SW_SERVICE (weak_object);
   SwServicePlurk *plurk = SW_SERVICE_PLURK (service);
@@ -496,8 +234,9 @@ got_login_data (RestProxyCall *call,
   construct_user_data (plurk, root);
   g_object_unref (root);
 
+  sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
+
   g_object_unref (call);
-  refresh (service);
 }
 
 static void
@@ -510,8 +249,6 @@ online_notify (gboolean online, gpointer user_data)
     if (priv->username && priv->password) {
       RestProxyCall *call;
 
-      priv->proxy = rest_proxy_new ("http://www.plurk.com/API/", FALSE);
-
       call = rest_proxy_new_call (priv->proxy);
       rest_proxy_call_set_function (call, "Users/login");
       rest_proxy_call_add_params (call,
@@ -519,19 +256,13 @@ online_notify (gboolean online, gpointer user_data)
                                   "username", priv->username,
                                   "password", priv->password,
                                   NULL);
-      rest_proxy_call_async (call, got_login_data, (GObject*)plurk, NULL, NULL);
+      rest_proxy_call_async (call, _got_login_data, (GObject*)plurk, NULL, NULL);
       /* Set offline for now and wait for access_token_cb to return */
       priv->credentials = OFFLINE;
     } else {
       priv->credentials = OFFLINE;
-      sw_service_emit_refreshed ((SwService *)plurk, NULL);
     }
   } else {
-    if (priv->proxy) {
-      g_object_unref (priv->proxy);
-      priv->proxy = NULL;
-    }
-
     g_free (priv->user_id);
     priv->user_id = NULL;
 
@@ -542,18 +273,60 @@ online_notify (gboolean online, gpointer user_data)
   }
 }
 
+/*
+ * Callback from the keyring lookup in refresh_credentials.
+ */
+static void
+found_password_cb (GnomeKeyringResult  result,
+                   GList              *list,
+                   gpointer            user_data)
+{
+  SwService *service = SW_SERVICE (user_data);
+  SwServicePlurk *plurk = SW_SERVICE_PLURK (service);
+  SwServicePlurkPrivate *priv = plurk->priv;
+
+  if (result == GNOME_KEYRING_RESULT_OK && list != NULL) {
+    GnomeKeyringNetworkPasswordData *data = list->data;
+
+    g_free (priv->username);
+    g_free (priv->password);
+
+    priv->username = g_strdup (data->user);
+    priv->password = g_strdup (data->password);
+
+    /* If we're online, force a reconnect to fetch new credentials */
+    if (sw_is_online ()) {
+      online_notify (FALSE, service);
+      online_notify (TRUE, service);
+    }
+  } else {
+    g_free (priv->username);
+    g_free (priv->password);
+    priv->username = NULL;
+    priv->password = NULL;
+    priv->credentials = OFFLINE;
+
+    if (result != GNOME_KEYRING_RESULT_NO_MATCH) {
+      g_warning (G_STRLOC ": Error getting password: %s", gnome_keyring_result_to_message (result));
+    }
+  }
+
+  sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
+}
+
+static void
+refresh_credentials (SwServicePlurk *plurk)
+{
+  gnome_keyring_find_network_password (NULL, NULL,
+                                       "www.plurk.com",
+                                       NULL, NULL, NULL, 0,
+                                       found_password_cb, plurk, NULL);
+}
+
 static void
 credentials_updated (SwService *service)
 {
-  /* If we're online, force a reconnect to fetch new credentials */
-  if (sw_is_online ()) {
-    online_notify (FALSE, service);
-    online_notify (TRUE, service);
-  }
-
-  sw_service_emit_user_changed (service);
-  sw_service_emit_capabilities_changed ((SwService *)service,
-                                        get_dynamic_caps (service));
+  refresh_credentials (SW_SERVICE_TWITTER (service));
 }
 
 static const char *
@@ -573,13 +346,6 @@ sw_service_plurk_dispose (GObject *object)
   if (priv->proxy) {
     g_object_unref (priv->proxy);
     priv->proxy = NULL;
-  }
-
-  if (priv->gconf) {
-    gconf_client_notify_remove (priv->gconf, priv->gconf_notify_id[0]);
-    gconf_client_notify_remove (priv->gconf, priv->gconf_notify_id[1]);
-    g_object_unref (priv->gconf);
-    priv->gconf = NULL;
   }
 
   G_OBJECT_CLASS (sw_service_plurk_parent_class)->dispose (object);
@@ -611,11 +377,8 @@ sw_service_plurk_class_init (SwServicePlurkClass *klass)
   object_class->finalize = sw_service_plurk_finalize;
 
   service_class->get_name = sw_service_plurk_get_name;
-  service_class->start = start;
-  service_class->refresh = refresh;
   service_class->get_static_caps = get_static_caps;
   service_class->get_dynamic_caps = get_dynamic_caps;
-  service_class->request_avatar = request_avatar;
   service_class->credentials_updated = credentials_updated;
 }
 
@@ -653,29 +416,14 @@ sw_service_plurk_initable (GInitable    *initable,
 
   priv->api_key = g_strdup (key);
 
-  if (sw_service_get_param ((SwService *)plurk, "own")) {
-    priv->type = OWN;
-  } else if (sw_service_get_param ((SwService *)plurk, "friends")){
-    priv->type = FRIENDS;
-  } else {
-    priv->type = BOTH;
-  }
-
   priv->credentials = OFFLINE;
 
-  priv->gconf = gconf_client_get_default ();
-  gconf_client_add_dir (priv->gconf, KEY_BASE,
-                        GCONF_CLIENT_PRELOAD_ONELEVEL, NULL);
-  priv->gconf_notify_id[0] = gconf_client_notify_add (priv->gconf, KEY_USER,
-                                                      auth_changed_cb, plurk,
-                                                      NULL, NULL);
-  priv->gconf_notify_id[1] = gconf_client_notify_add (priv->gconf, KEY_PASS,
-                                                      auth_changed_cb, plurk,
-                                                      NULL, NULL);
-  gconf_client_notify (priv->gconf, KEY_USER);
-  gconf_client_notify (priv->gconf, KEY_PASS);
+  sw_keystore_get_key_secret ("plurk", &key, &secret);
+  priv->proxy = rest_proxy_new ("http://www.plurk.com/API/", FALSE); 
 
   sw_online_add_notify (online_notify, plurk);
+
+  refresh_credentials (twitter);
 
   priv->inited = TRUE;
 
@@ -692,14 +440,43 @@ initable_iface_init (gpointer g_iface, gpointer iface_data)
 }
 
 /* Query interface */
+
+static const gchar *valid_queries[] = {"feed",
+                                       "own",
+                                       "friends-only"};
+static gboolean
+_check_query_validity (const gchar *query)
+{
+  gint i = 0;
+
+  for (i = 0; i < G_N_ELEMENTS(valid_queries); i++)
+  {
+    if (g_str_equal (query, valid_queries[i]))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
 static void
 _plurk_query_open_view (SwQueryIface          *self,
+                        const gchar           *query,
                         GHashTable            *params,
                         DBusGMethodInvocation *context)
 {
   SwServicePlurkPrivate *priv = GET_PRIVATE (self);
   SwItemView *item_view;
   const gchar *object_path;
+
+  if (!_check_query_validity (query))
+  {
+    dbus_g_method_return_error (context,
+                                g_error_new (SW_SERVICE_ERROR,
+                                             SW_SERVICE_ERROR_INVALID_QUERY,
+                                             "Query '%s' is invalid",
+                                             query));
+    return;
+  }
 
   item_view = g_object_new (SW_TYPE_PLURK_ITEM_VIEW,
                             "proxy", priv->proxy,
@@ -708,6 +485,9 @@ _plurk_query_open_view (SwQueryIface          *self,
                             NULL);
 
   object_path = sw_item_view_get_object_path (item_view);
+  /* Ensure the object gets disposed when the client goes away */
+  sw_client_monitor_add (dbus_g_method_get_sender (context),
+                         (GObject *)item_view);
   sw_query_iface_return_from_open_view (context,
                                         object_path);
 }
