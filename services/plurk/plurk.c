@@ -439,7 +439,6 @@ sw_service_plurk_initable (GInitable    *initable,
 
   priv->credentials = OFFLINE;
 
-  sw_keystore_get_key_secret ("plurk", &key, &secret);
   priv->proxy = rest_proxy_new ("http://www.plurk.com/API/", FALSE); 
 
   sw_online_add_notify (online_notify, plurk);
