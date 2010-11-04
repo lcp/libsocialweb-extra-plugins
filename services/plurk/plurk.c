@@ -347,7 +347,7 @@ refresh_credentials (SwServicePlurk *plurk)
 static void
 credentials_updated (SwService *service)
 {
-  refresh_credentials (SW_SERVICE_TWITTER (service));
+  refresh_credentials (SW_SERVICE_PLURK (service));
 }
 
 static const char *
@@ -444,7 +444,7 @@ sw_service_plurk_initable (GInitable    *initable,
 
   sw_online_add_notify (online_notify, plurk);
 
-  refresh_credentials (twitter);
+  refresh_credentials (plurk);
 
   priv->inited = TRUE;
 
@@ -503,6 +503,8 @@ _plurk_query_open_view (SwQueryIface          *self,
                             "proxy", priv->proxy,
                             "api_key", priv->api_key,
                             "service", self,
+                            "query", query,
+                            "params", params,
                             NULL);
 
   object_path = sw_item_view_get_object_path (item_view);
@@ -575,7 +577,6 @@ _update_status_cb (RestProxyCall *call,
                 error->message);
     sw_status_update_iface_emit_status_updated (weak_object, FALSE);
   } else {
-    SW_DEBUG (TWITTER, G_STRLOC ": Status updated.");
     sw_status_update_iface_emit_status_updated (weak_object, TRUE);
   }
 }
