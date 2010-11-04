@@ -270,6 +270,7 @@ _got_status_updates_cb (RestProxyCall *call,
                         gpointer       userdata)
 {
   SwPlurkItemView *item_view = SW_PLURK_ITEM_VIEW (weak_object);
+  SwPlurkItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwService *service;
   JsonParser *parser = NULL;
   JsonNode *root, *plurks, *plurk_users, *node;
