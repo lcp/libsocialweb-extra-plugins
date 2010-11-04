@@ -32,6 +32,7 @@
 
 #include <libsocialweb/sw-debug.h>
 #include <libsocialweb/sw-item.h>
+#include <libsocialweb/sw-cache.h>
 
 #include "plurk-item-view.h"
 
@@ -48,6 +49,8 @@ struct _SwPlurkItemViewPrivate {
   RestProxy *proxy;
   char *api_key;
   guint timeout_id;
+  GHashTable *params;
+  gchar *query;
 };
 
 enum
@@ -55,13 +58,27 @@ enum
   PROP_0,
   PROP_PROXY,
   PROP_APIKEY,
+  PROP_PARAMS,
+  PROP_QUERY
 };
 
 #define UPDATE_TIMEOUT 5 * 60
 
+static void _service_item_hidden_cb (SwService   *service,
+                                     const gchar *uid,
+                                     SwItemView  *item_view);
+
+static void _service_user_changed_cb (SwService  *service,
+                                      SwItemView *item_view);
+static void _service_capabilities_changed_cb (SwService    *service,
+                                              const gchar **caps,
+                                              SwItemView   *item_view);
+
 static void
-sw_plurk_item_view_get_property (GObject *object, guint property_id,
-                                 GValue *value, GParamSpec *pspec)
+sw_plurk_item_view_get_property (GObject    *object,
+                                 guint       property_id,
+                                 GValue     *value,
+                                 GParamSpec *pspec)
 {
   SwPlurkItemViewPrivate *priv = GET_PRIVATE (object);
 
@@ -72,14 +89,22 @@ sw_plurk_item_view_get_property (GObject *object, guint property_id,
     case PROP_APIKEY:
       g_value_set_string (value, priv->api_key);
       break;
+    case PROP_PARAMS:
+      g_value_set_boxed (value, priv->params);
+      break;
+    case PROP_QUERY:
+      g_value_set_string (value, priv->query);
+      break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
   }
 }
 
 static void
-sw_plurk_item_view_set_property (GObject *object, guint property_id,
-                                 const GValue *value, GParamSpec *pspec)
+sw_plurk_item_view_set_property (GObject      *object,
+                                 guint         property_id,
+                                 const GValue *value,
+                                 GParamSpec   *pspec)
 {
   SwPlurkItemViewPrivate *priv = GET_PRIVATE (object);
 
@@ -98,6 +123,12 @@ sw_plurk_item_view_set_property (GObject *object, guint property_id,
       }
       priv->api_key = g_value_dup_string (value);
       break;
+    case PROP_PARAMS:
+      priv->params = g_value_dup_boxed (value);
+      break;
+    case PROP_QUERY:
+      priv->query = g_value_dup_string (value);
+      break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
   }
@@ -106,6 +137,7 @@ sw_plurk_item_view_set_property (GObject *object, guint property_id,
 static void
 sw_plurk_item_view_dispose (GObject *object)
 {
+  SwItemView *item_view = SW_ITEM_VIEW (object);
   SwPlurkItemViewPrivate *priv = GET_PRIVATE (object);
 
   if (priv->proxy)
@@ -120,6 +152,16 @@ sw_plurk_item_view_dispose (GObject *object)
     priv->timeout_id = 0;
   }
 
+  g_signal_handlers_disconnect_by_func (sw_item_view_get_service (item_view),
+                                        _service_item_hidden_cb,
+                                        item_view);
+  g_signal_handlers_disconnect_by_func (sw_item_view_get_service (item_view),
+                                        _service_user_changed_cb,
+                                        item_view);
+  g_signal_handlers_disconnect_by_func (sw_item_view_get_service (item_view),
+                                        _service_capabilities_changed_cb,
+                                        item_view);
+
   G_OBJECT_CLASS (sw_plurk_item_view_parent_class)->dispose (object);
 }
 
@@ -127,8 +169,10 @@ static void
 sw_plurk_item_view_finalize (GObject *object)
 {
   SwPlurkItemViewPrivate *priv = GET_PRIVATE (object);
-  if (priv->api_key)
-    g_free (priv->api_key);
+
+  g_free (priv->api_key);
+  g_free (priv->query);
+  g_hash_table_unref (priv->params);
 
   G_OBJECT_CLASS (sw_plurk_item_view_parent_class)->finalize (object);
 }
@@ -327,12 +371,21 @@ _got_status_updates_cb (RestProxyCall *call,
     sw_item_take (item, "url", url);
 
     /* Add the item into the set */
-    sw_set_add (set, G_OBJECT (item));
+    if (!sw_service_is_uid_banned (service,
+                                   sw_item_get (item, "id"))) {
+      sw_set_add (set, G_OBJECT (item));
+    }
     g_object_unref (item);
   }
 
-  if (!sw_set_is_empty (set))
-    sw_service_emit_refreshed ((SwService *)service, set);
+  sw_item_view_set_from_set (SW_ITEM_VIEW (item_view),
+                             set);
+
+  /* Save the results of this set to the cache */
+  sw_cache_save (service,
+                 priv->query,
+                 priv->params,
+                 set);
 
   g_list_free (plurks_ids);
   g_object_unref (parser);
@@ -347,6 +400,7 @@ _get_status_updates (SwPlurkItemView *item_view)
 
   call = rest_proxy_new_call (priv->proxy);
 
+  /* TODO Request plurks for "own" or "feed" */
   rest_proxy_call_set_function (call, "Timeline/getPlurks");
 
   rest_proxy_call_add_params (call,
@@ -367,6 +421,24 @@ _update_timeout_cb (gpointer data)
 }
 
 static void
+_load_from_cache (SwPlurkItemView *item_view)
+{
+  SwPlurkItemViewPrivate *priv = GET_PRIVATE (item_view);
+  SwSet *set;
+
+  set = sw_cache_load (sw_item_view_get_service (SW_ITEM_VIEW (item_view)),
+                       priv->query,
+                       priv->params);
+
+  if (set)
+  {
+    sw_item_view_set_from_set (SW_ITEM_VIEW (item_view),
+                               set);
+    sw_set_unref (set);
+  }
+}
+
+static void
 plurk_item_view_start (SwItemView *item_view)
 {
   SwPlurkItemViewPrivate *priv = GET_PRIVATE (item_view);
@@ -378,8 +450,88 @@ plurk_item_view_start (SwItemView *item_view)
     priv->timeout_id = g_timeout_add_seconds (UPDATE_TIMEOUT,
                                               (GSourceFunc)_update_timeout_cb,
                                               item_view);
+    _load_from_cache ((SwPlurkItemView *)item_view);
     _get_status_updates ((SwPlurkItemView *)item_view);
   }
+}
+
+static void
+plurk_item_view_stop (SwItemView *item_view)
+{
+  SwPlurkItemViewPrivate *priv = GET_PRIVATE (item_view);
+
+  if (!priv->timeout_id)
+  {
+    g_warning (G_STRLOC ": View not running");
+  } else {
+    g_source_remove (priv->timeout_id);
+    priv->timeout_id = 0;
+  }
+}
+
+static void
+plurk_item_view_refresh (SwItemView *item_view)
+{
+  _get_status_updates ((SwPlurkItemView *)item_view);
+}
+
+static void
+_service_item_hidden_cb (SwService   *service,
+                         const gchar *uid,
+                         SwItemView  *item_view)
+{
+  sw_item_view_remove_by_uid (item_view, uid);
+}
+
+static void
+_service_user_changed_cb (SwService  *service,
+                          SwItemView *item_view)
+{
+  SwSet *set;
+
+  /* We need to empty the set */
+  set = sw_item_set_new ();
+  sw_item_view_set_from_set (SW_ITEM_VIEW (item_view),
+                             set);
+  sw_set_unref (set);
+
+  /* And drop the cache */
+  sw_cache_drop_all (service);
+}
+
+static void
+_service_capabilities_changed_cb (SwService    *service,
+                                  const gchar **caps,
+                                  SwItemView   *item_view)
+{
+  if (sw_service_has_cap (caps, CREDENTIALS_VALID))
+  {
+    plurk_item_view_refresh (item_view);
+  }
+}
+
+static void
+sw_plurk_item_view_constructed (GObject *object)
+{
+  SwItemView *item_view = SW_ITEM_VIEW (object);
+
+  g_signal_connect (sw_item_view_get_service (item_view),
+                    "item-hidden",
+                    (GCallback)_service_item_hidden_cb,
+                    item_view);
+
+  g_signal_connect (sw_item_view_get_service (item_view),
+                    "user-changed",
+                    (GCallback)_service_user_changed_cb,
+                    item_view);
+
+  g_signal_connect (sw_item_view_get_service (item_view),
+                    "capabilities-changed",
+                    (GCallback)_service_capabilities_changed_cb,
+                    item_view);
+
+  if (G_OBJECT_CLASS (sw_plurk_item_view_parent_class)->constructed)
+    G_OBJECT_CLASS (sw_plurk_item_view_parent_class)->constructed (object);
 }
 
 static void
@@ -395,8 +547,11 @@ sw_plurk_item_view_class_init (SwPlurkItemViewClass *klass)
   object_class->set_property = sw_plurk_item_view_set_property;
   object_class->dispose = sw_plurk_item_view_dispose;
   object_class->finalize = sw_plurk_item_view_finalize;
+  object_class->constructed = sw_plurk_item_view_constructed;
 
   item_view_class->start = plurk_item_view_start;
+  item_view_class->stop = plurk_item_view_stop;
+  item_view_class->refresh = plurk_item_view_refresh;
 
   pspec = g_param_spec_object ("proxy",
                                "proxy",
@@ -404,6 +559,20 @@ sw_plurk_item_view_class_init (SwPlurkItemViewClass *klass)
                                REST_TYPE_PROXY,
                                G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   g_object_class_install_property (object_class, PROP_PROXY, pspec);
+
+  pspec = g_param_spec_string ("query",
+                               "query",
+                               "query",
+                               NULL,
+                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_QUERY, pspec);
+
+  pspec = g_param_spec_boxed ("params",
+                              "params",
+                              "params",
+                              G_TYPE_HASH_TABLE,
+                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_PARAMS, pspec);
 }
 
 static void
