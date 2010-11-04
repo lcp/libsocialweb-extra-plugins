@@ -51,6 +51,8 @@ PKG_CHECK_MODULES(LIBSOCIWEB_KEYSTORE, libsocialweb-keystore >= 0.25.5)
 SOCIALWEB_ENABLE_SERVICE(Youtube, youtube, YOUTUBE)
 SOCIALWEB_ENABLE_SERVICE(Plurk, plurk, PLURK)
 SOCIALWEB_ENABLE_SERVICE(Sina, sina, SINA)
+SOCIALWEB_ENABLE_SERVICE(Digg, digg, DIGG)
+SOCIALWEB_ENABLE_SERVICE(Myspace, myspace, MYSPACE)
 
 servicesdir=`pkg-config --variable=servicesdir libsocialweb-module`
 AC_SUBST(servicesdir)
