@@ -283,6 +283,60 @@ get_utc_date (const char *s)
   return sw_time_t_to_string (mktime (&tm));
 }
 
+static SwItem *
+make_item (SwYoutubeItemView *item_view,
+           SwService        *service,
+           RestXmlNode      *node)
+{
+  SwItem *item;
+  char *author, *date, *url;
+  RestXmlNode *subnode, *thumb_node;
+
+  item = sw_item_new ();
+  sw_item_set_service (item, service);
+  /*
+  <rss>
+    <channel>
+      <item>
+        <guid isPermaLink="false">http://gdata.youtube.com/feeds/api/videos/<videoid></guid>
+        <atom:updated>2010-02-13T06:17:32.000Z</atom:updated>
+        <title>Video Title</title>
+        <author>Author Name</author>
+        <link>http://www.youtube.com/watch?v=<videoid>&amp;feature=youtube_gdata</link>
+        <media:group>
+          <media:thumbnail url="http://i.ytimg.com/vi/<videoid>/default.jpg" height="90" width="120" time="00:03:00.500"/>
+        </media:group>
+      </item>
+    </channel>
+  </rss>
+  */
+
+  sw_item_put (item, "id", get_child_node_value (node, "guid"));
+
+  date = get_child_node_value (node, "atom:updated");
+  if (date != NULL)
+    sw_item_put (item, "date", get_utc_date(date));
+
+  sw_item_put (item, "title", get_child_node_value (node, "title"));
+  sw_item_put (item, "url", get_child_node_value (node, "link"));
+  author = get_child_node_value (node, "author");
+  sw_item_put (item, "author", author);
+
+  /* media:group */
+  subnode = rest_xml_node_find (node, "media:group");
+  if (subnode){
+    thumb_node = rest_xml_node_find (subnode, "media:thumbnail");
+    url = (char *) rest_xml_node_get_attr (thumb_node, "url");
+    sw_item_request_image_fetch (item, TRUE, "thumbnail", url);
+  }
+
+  url = get_author_icon_url (item_view, author);
+  sw_item_request_image_fetch (item, FALSE, "authoricon", url);
+  g_free (url);
+
+  return item;
+}
+
 static void
 _got_videos_cb (RestProxyCall *call,
                 const GError  *error,
@@ -315,59 +369,15 @@ _got_videos_cb (RestProxyCall *call,
 
   service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
-  while (node){
-    /*
-    <rss>
-      <channel>
-        <item>
-          <guid isPermaLink="false">http://gdata.youtube.com/feeds/api/videos/<videoid></guid>
-          <atom:updated>2010-02-13T06:17:32.000Z</atom:updated>
-          <title>Video Title</title>
-          <author>Author Name</author>
-          <link>http://www.youtube.com/watch?v=<videoid>&amp;feature=youtube_gdata</link>
-          <media:group>
-            <media:thumbnail url="http://i.ytimg.com/vi/<videoid>/default.jpg" height="90" width="120" time="00:03:00.500"/>
-          </media:group>
-        </item>
-      </channel>
-    </rss>
-    */
+  for (node = rest_xml_node_find (node, "item"); node; node = node->next) {
     SwItem *item;
-    char *author, *date, *url;
-    RestXmlNode *subnode, *thumb_node;
-
-    item = sw_item_new ();
-    sw_item_set_service (item, service);
-
-    sw_item_put (item, "id", get_child_node_value (node, "guid"));
-
-    date = get_child_node_value (node, "atom:updated");
-    if (date != NULL)
-      sw_item_put (item, "date", get_utc_date(date));
-
-    sw_item_put (item, "title", get_child_node_value (node, "title"));
-    sw_item_put (item, "url", get_child_node_value (node, "link"));
-    author = get_child_node_value (node, "author");
-    sw_item_put (item, "author", author);
-
-    /* media:group */
-    subnode = rest_xml_node_find (node, "media:group");
-    if (subnode){
-      thumb_node = rest_xml_node_find (subnode, "media:thumbnail");
-      url = (char *) rest_xml_node_get_attr (thumb_node, "url");
-      sw_item_request_image_fetch (item, TRUE, "thumbnail", url);
-    }
-
-    url = get_author_icon_url (item_view, author);
-    sw_item_request_image_fetch (item, FALSE, "authoricon", url);
-    g_free (url);
+    item = make_item (item_view, service, node);
 
     if (!sw_service_is_uid_banned (service, sw_item_get (item, "id"))) {
       sw_set_add (priv->set, (GObject *)item);
     }
-    g_object_unref (item);
 
-    node = node->next;
+    g_object_unref (item);
   }
 
   sw_item_view_set_from_set ((SwItemView *)item_view, priv->set);
