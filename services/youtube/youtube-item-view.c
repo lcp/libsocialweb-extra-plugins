@@ -32,7 +32,6 @@
 #include <libsocialweb/sw-debug.h>
 #include <libsocialweb/sw-item.h>
 #include <libsocialweb/sw-cache.h>
-#include <libsocialweb/sw-call-list.h>
 
 #include <glib/gi18n.h>
 
@@ -54,7 +53,6 @@ struct _SwYoutubeItemViewPrivate {
   gchar *developer_key;
   gchar *user_auth;
 
-  SwCallList *calls;
   SwSet *set;
   GHashTable *thumb_map;
 };
@@ -155,12 +153,6 @@ sw_youtube_item_view_dispose (GObject *object)
     priv->timeout_id = 0;
   }
 
-  if (priv->calls)
-  {
-    sw_call_list_free (priv->calls);
-    priv->calls = NULL;
-  }
-
   g_signal_handlers_disconnect_by_func (sw_item_view_get_service (item_view),
                                       _service_item_hidden_cb,
                                       item_view);
@@ -178,27 +170,6 @@ sw_youtube_item_view_finalize (GObject *object)
   g_hash_table_unref (priv->thumb_map);
 
   G_OBJECT_CLASS (sw_youtube_item_view_parent_class)->finalize (object);
-}
-
-static void
-_update_if_done (SwYoutubeItemView *item_view)
-{
-  SwYoutubeItemViewPrivate *priv = GET_PRIVATE (item_view);
-
-  if (sw_call_list_is_empty (priv->calls))
-  {
-    SwService *service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
-
-    sw_item_view_set_from_set ((SwItemView *)item_view, priv->set);
-
-    /* Save the results of this set to the cache */
-    sw_cache_save (service,
-                   priv->query,
-                   priv->params,
-                   priv->set);
-
-    sw_set_empty (priv->set);
-  }
 }
 
 RestXmlNode *
@@ -322,9 +293,6 @@ _got_videos_cb (RestProxyCall *call,
   SwYoutubeItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwService *service;
   RestXmlNode *root, *node;
-  SwSet *set;
-
-  sw_call_list_remove (priv->calls, call);
 
   if (error) {
     g_message (G_STRLOC ": error from Youtube: %s", error->message);
@@ -345,7 +313,6 @@ _got_videos_cb (RestProxyCall *call,
   /* Clean up the thumbnail mapping cache */
   g_hash_table_remove_all (priv->thumb_map);
 
-  set = sw_item_set_new ();
   service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
   while (node){
@@ -403,9 +370,17 @@ _got_videos_cb (RestProxyCall *call,
     node = node->next;
   }
 
-  rest_xml_node_unref (root);
+  sw_item_view_set_from_set ((SwItemView *)item_view, priv->set);
 
-  _update_if_done (item_view);
+  /* Save the results of this set to the cache */
+  sw_cache_save (service,
+                 priv->query,
+                 priv->params,
+                 priv->set);
+
+  sw_set_empty (priv->set);
+
+  rest_xml_node_unref (root);
 }
 
 static void
@@ -415,11 +390,9 @@ _get_status_updates (SwYoutubeItemView *item_view)
   RestProxyCall *call;
   char *user_auth = NULL, *devkey = NULL;
 
-  sw_call_list_cancel_all (priv->calls);
   sw_set_empty (priv->set);
 
   call = rest_proxy_new_call (priv->proxy);
-  sw_call_list_add (priv->calls, call);
 
   user_auth = g_strdup_printf ("GoogleLogin auth=%s", priv->user_auth);
   rest_proxy_call_add_header (call, "Authorization", user_auth);
@@ -604,7 +577,6 @@ sw_youtube_item_view_init (SwYoutubeItemView *self)
 {
   SwYoutubeItemViewPrivate *priv = GET_PRIVATE (self);
 
-  priv->calls = sw_call_list_new ();
   priv->set = sw_item_set_new ();
   priv->thumb_map = g_hash_table_new(g_str_hash, g_str_equal);
 }
