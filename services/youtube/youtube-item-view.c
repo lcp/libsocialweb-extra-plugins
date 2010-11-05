@@ -321,7 +321,8 @@ _got_videos_cb (RestProxyCall *call,
   SwYoutubeItemView *item_view = SW_YOUTUBE_ITEM_VIEW (weak_object);
   SwYoutubeItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwService *service;
-  RestXmlNode *root, *video_n;
+  RestXmlNode *root, *node;
+  SwSet *set;
 
   sw_call_list_remove (priv->calls, call);
 
@@ -345,6 +346,7 @@ _got_videos_cb (RestProxyCall *call,
   g_hash_table_remove_all (priv->thumb_map);
 
   set = sw_item_set_new ();
+  service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
   while (node){
     /*

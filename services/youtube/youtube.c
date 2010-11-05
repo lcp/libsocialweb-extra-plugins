@@ -33,10 +33,12 @@
 #include <libsocialweb/sw-utils.h>
 #include <libsocialweb/sw-web.h>
 #include <libsocialweb/sw-debug.h>
+#include <libsocialweb-keyfob/sw-keyfob.h>
+#include <libsocialweb-keystore/sw-keystore.h>
 #include <libsocialweb/sw-client-monitor.h>
 
+#include <rest/rest-proxy.h>
 #include <rest/rest-xml-parser.h>
-#include <libsoup/soup.h>
 
 #include <interfaces/sw-query-ginterface.h>
 
@@ -50,7 +52,7 @@ G_DEFINE_TYPE_WITH_CODE (SwServiceYoutube,
                          sw_service_youtube,
                          SW_TYPE_SERVICE,
                          G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
-                                                initable_iface_init),
+                                                initable_iface_init)
                          G_IMPLEMENT_INTERFACE (SW_TYPE_QUERY_IFACE,
                                                 query_iface_init));
 
@@ -129,9 +131,9 @@ get_dynamic_caps (SwService *service)
 
 static void
 _got_user_auth (RestProxyCall *call,
-               const GError  *error,
-               GObject       *weak_object,
-               gpointer       user_data)
+                const GError  *error,
+                GObject       *weak_object,
+                gpointer       user_data)
 {
   SwService *service = SW_SERVICE (weak_object);
   SwServiceYoutubePrivate *priv = SW_SERVICE_YOUTUBE (service)->priv;
@@ -267,7 +269,7 @@ refresh_credentials (SwServiceYoutube *youtube)
 static void
 credentials_updated (SwService *service)
 {
-  refresh_credentials (SW_SERVICE_VIMEO (service));
+  refresh_credentials (SW_SERVICE_YOUTUBE (service));
 }
 
 static const char *
@@ -418,7 +420,7 @@ _youtube_query_open_view (SwQueryIface          *self,
     return;
   }
 
-  item_view = g_object_new (SW_TYPE_VIMEO_ITEM_VIEW,
+  item_view = g_object_new (SW_TYPE_YOUTUBE_ITEM_VIEW,
                             "proxy", priv->proxy,
                             "developer_key", priv->developer_key,
                             "user_auth", priv->user_auth,
@@ -443,5 +445,5 @@ query_iface_init (gpointer g_iface,
 {
   SwQueryIfaceClass *klass = (SwQueryIfaceClass*)g_iface;
 
-  sw_query_iface_implement_open_view (klass, _vimeo_query_open_view);
+  sw_query_iface_implement_open_view (klass, _youtube_query_open_view);
 }
