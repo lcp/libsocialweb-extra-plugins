@@ -1,15 +1,38 @@
+/*
+ * libsocialweb Sina service support
+ *
+ * Copyright (C) 2010 Novell, Inc.
+ *
+ * Author: Gary Ching-Pang Lin <glin@novell.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU Lesser General Public License,
+ * version 2.1, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include <config.h>
+
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
-#include <libsocialweb/sw-utils.h>
 
 #include <rest/rest-proxy.h>
 #include <rest/rest-xml-parser.h>
 #include <libsoup/soup.h>
 
+#include <libsocialweb/sw-utils.h>
 #include <libsocialweb/sw-debug.h>
 #include <libsocialweb/sw-item.h>
+#include <libsocialweb/sw-cache.h>
 
 #include "sina-item-view.h"
 
@@ -25,19 +48,34 @@ typedef struct _SwSinaItemViewPrivate SwSinaItemViewPrivate;
 struct _SwSinaItemViewPrivate {
   RestProxy *proxy;
   guint timeout_id;
+  GHashTable *params;
+  gchar *query;
 };
 
 enum
 {
   PROP_0,
-  PROP_PROXY
+  PROP_PROXY,
+  PROP_PARAMS,
+  PROP_QUERY
 };
 
 #define UPDATE_TIMEOUT 5 * 60
 
+static void _service_item_hidden_cb (SwService   *service,
+                                     const gchar *uid,
+                                     SwItemView  *item_view);
+static void _service_user_changed_cb (SwService  *service,
+                                      SwItemView *item_view);
+static void _service_capabilities_changed_cb (SwService    *service,
+                                              const gchar **caps,
+                                              SwItemView   *item_view);
+
 static void
-sw_sina_item_view_get_property (GObject *object, guint property_id,
-                                     GValue *value, GParamSpec *pspec)
+sw_sina_item_view_get_property (GObject    *object,
+                                guint       property_id,
+                                GValue     *value,
+                                GParamSpec *pspec)
 {
   SwSinaItemViewPrivate *priv = GET_PRIVATE (object);
 
@@ -45,14 +83,22 @@ sw_sina_item_view_get_property (GObject *object, guint property_id,
     case PROP_PROXY:
       g_value_set_object (value, priv->proxy);
       break;
+    case PROP_PARAMS:
+      g_value_set_boxed (value, priv->params);
+      break;
+    case PROP_QUERY:
+      g_value_set_string (value, priv->query);
+      break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
   }
 }
 
 static void
-sw_sina_item_view_set_property (GObject *object, guint property_id,
-                                     const GValue *value, GParamSpec *pspec)
+sw_sina_item_view_set_property (GObject      *object,
+                                guint         property_id,
+                                const GValue *value,
+                                GParamSpec   *pspec)
 {
   SwSinaItemViewPrivate *priv = GET_PRIVATE (object);
 
@@ -64,6 +110,12 @@ sw_sina_item_view_set_property (GObject *object, guint property_id,
       }
       priv->proxy = g_value_dup_object (value);
       break;
+    case PROP_PARAMS:
+      priv->params = g_value_dup_boxed (value);
+      break;
+    case PROP_QUERY:
+      priv->query = g_value_dup_string (value);
+      break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
   }
@@ -72,6 +124,7 @@ sw_sina_item_view_set_property (GObject *object, guint property_id,
 static void
 sw_sina_item_view_dispose (GObject *object)
 {
+  SwItemView *item_view = SW_ITEM_VIEW (object);
   SwSinaItemViewPrivate *priv = GET_PRIVATE (object);
 
   if (priv->proxy) {
@@ -84,13 +137,28 @@ sw_sina_item_view_dispose (GObject *object)
     priv->timeout_id = 0;
   }
 
+  g_signal_handlers_disconnect_by_func (sw_item_view_get_service (item_view),
+                                        _service_item_hidden_cb,
+                                        item_view);
+  g_signal_handlers_disconnect_by_func (sw_item_view_get_service (item_view),
+                                        _service_user_changed_cb,
+                                        item_view);
+  g_signal_handlers_disconnect_by_func (sw_item_view_get_service (item_view),
+                                        _service_capabilities_changed_cb,
+                                        item_view);
+
   G_OBJECT_CLASS (sw_sina_item_view_parent_class)->dispose (object);
 }
 
 static void
 sw_sina_item_view_finalize (GObject *object)
 {
+  SwSinaItemViewPrivate *priv = GET_PRIVATE (object);
+
   /* free private variables */
+  g_free (priv->query);
+  g_hash_table_unref (priv->params);
+
   G_OBJECT_CLASS (sw_sina_item_view_parent_class)->finalize (object);
 }
 
@@ -204,7 +272,9 @@ _populate_set_from_node (SwService   *service,
     sw_item_take (item, "url", url);
     g_free (uid);
 
-    sw_set_add (set, G_OBJECT (item));
+    if (!sw_service_is_uid_banned (service, sw_item_get (item, "id"))) {
+      sw_set_add (set, G_OBJECT (item));
+    }
     g_object_unref (item);
 
     /* Next node */
@@ -221,6 +291,7 @@ _got_user_status_cb (RestProxyCall *call,
                      gpointer       userdata)
 {
   SwSinaItemView *item_view = SW_SINA_ITEM_VIEW (weak_object);
+  SwSinaItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwSet *set = (SwSet *)userdata;
   RestXmlNode *root;
   SwService *service;
@@ -236,8 +307,15 @@ _got_user_status_cb (RestProxyCall *call,
   _populate_set_from_node (service, set, root);
   rest_xml_node_unref (root);
 
-  if (!sw_set_is_empty (set))
-    sw_service_emit_refreshed (service, set);
+  g_object_unref (call);
+
+  sw_item_view_set_from_set (SW_ITEM_VIEW (item_view), set);
+
+  /* Save the results of this set to the cache */
+  sw_cache_save (service,
+                 priv->query,
+                 priv->params,
+                 set);
 
   sw_set_unref (set);
 }
@@ -264,6 +342,8 @@ _got_friends_status_cb (RestProxyCall *call,
   _populate_set_from_node (service, set, root);
   rest_xml_node_unref (root);
 
+  g_object_unref (call);
+
   _get_user_status_updates (item_view, set);
 }
 
@@ -283,8 +363,8 @@ _get_user_status_updates (SwSinaItemView *item_view,
 }
 
 static void
-_get_friends_status_update (SwSinaItemView *item_view,
-                            SwSet          *set)
+_get_friends_status_updates (SwSinaItemView *item_view,
+                             SwSet          *set)
 {
   SwSinaItemViewPrivate *priv = GET_PRIVATE (item_view);
   RestProxyCall *call;
@@ -300,12 +380,18 @@ _get_friends_status_update (SwSinaItemView *item_view,
 static void
 _get_status_updates (SwSinaItemView *item_view)
 {
+  SwSinaItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwSet *set;
 
   set = sw_item_set_new ();
-  _get_friends_status_update (item_view, set);
-}
 
+  if (g_str_equal (priv->query, "own"))
+    _get_user_status_updates (item_view, set);
+  else if (g_str_equal (priv->query, "feed")) 
+    _get_friends_status_updates (item_view, set);
+  else
+    g_error (G_STRLOC ": Unexpected query '%s'", priv->query);
+}
 
 static gboolean
 _update_timeout_cb (gpointer data)
@@ -315,6 +401,24 @@ _update_timeout_cb (gpointer data)
   _get_status_updates (item_view);
 
   return TRUE;
+}
+
+static void
+_load_from_cache (SwSinaItemView *item_view)
+{
+  SwSinaItemViewPrivate *priv = GET_PRIVATE (item_view);
+  SwSet *set;
+
+  set = sw_cache_load (sw_item_view_get_service (SW_ITEM_VIEW (item_view)),
+                       priv->query,
+                       priv->params);
+
+  if (set)
+  {
+    sw_item_view_set_from_set (SW_ITEM_VIEW (item_view),
+                               set);
+    sw_set_unref (set);
+  }
 }
 
 static void
@@ -329,8 +433,88 @@ sina_item_view_start (SwItemView *item_view)
     priv->timeout_id = g_timeout_add_seconds (UPDATE_TIMEOUT,
                                               (GSourceFunc)_update_timeout_cb,
                                               item_view);
+    _load_from_cache ((SwSinaItemView *)item_view);
     _get_status_updates ((SwSinaItemView *)item_view);
   }
+}
+
+static void
+sina_item_view_stop (SwItemView *item_view)
+{
+  SwSinaItemViewPrivate *priv = GET_PRIVATE (item_view);
+
+  if (!priv->timeout_id)
+  {
+    g_warning (G_STRLOC ": View not running");
+  } else {
+    g_source_remove (priv->timeout_id);
+    priv->timeout_id = 0;
+  }
+}
+
+static void
+sina_item_view_refresh (SwItemView *item_view)
+{
+  _get_status_updates ((SwSinaItemView *)item_view);
+}
+
+static void
+_service_item_hidden_cb (SwService   *service,
+                         const gchar *uid,
+                         SwItemView  *item_view)
+{
+  sw_item_view_remove_by_uid (item_view, uid);
+}
+
+static void
+_service_user_changed_cb (SwService  *service,
+                          SwItemView *item_view)
+{
+  SwSet *set;
+
+  /* We need to empty the set */
+  set = sw_item_set_new ();
+  sw_item_view_set_from_set (SW_ITEM_VIEW (item_view),
+                             set);
+  sw_set_unref (set);
+
+  /* And drop the cache */
+  sw_cache_drop_all (service);
+}
+
+static void
+_service_capabilities_changed_cb (SwService    *service,
+                                  const gchar **caps,
+                                  SwItemView   *item_view)
+{
+  if (sw_service_has_cap (caps, CREDENTIALS_VALID))
+  {
+    sina_item_view_refresh (item_view);
+  }
+}
+
+static void
+sw_sina_item_view_constructed (GObject *object)
+{
+  SwItemView *item_view = SW_ITEM_VIEW (object);
+
+  g_signal_connect (sw_item_view_get_service (item_view),
+                    "item-hidden",
+                    (GCallback)_service_item_hidden_cb,
+                    item_view);
+
+  g_signal_connect (sw_item_view_get_service (item_view),
+                    "user-changed",
+                    (GCallback)_service_user_changed_cb,
+                    item_view);
+
+  g_signal_connect (sw_item_view_get_service (item_view),
+                    "capabilities-changed",
+                    (GCallback)_service_capabilities_changed_cb,
+                    item_view);
+
+  if (G_OBJECT_CLASS (sw_sina_item_view_parent_class)->constructed)
+    G_OBJECT_CLASS (sw_sina_item_view_parent_class)->constructed (object);
 }
 
 static void
@@ -346,8 +530,11 @@ sw_sina_item_view_class_init (SwSinaItemViewClass *klass)
   object_class->set_property = sw_sina_item_view_set_property;
   object_class->dispose = sw_sina_item_view_dispose;
   object_class->finalize = sw_sina_item_view_finalize;
+  object_class->constructed = sw_sina_item_view_constructed;
 
   item_view_class->start = sina_item_view_start;
+  item_view_class->stop = sina_item_view_stop;
+  item_view_class->refresh = sina_item_view_refresh;
 
   pspec = g_param_spec_object ("proxy",
                                "proxy",
@@ -355,6 +542,20 @@ sw_sina_item_view_class_init (SwSinaItemViewClass *klass)
                                REST_TYPE_PROXY,
                                G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   g_object_class_install_property (object_class, PROP_PROXY, pspec);
+
+  pspec = g_param_spec_string ("query",
+                               "query",
+                               "query",
+                               NULL,
+                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_QUERY, pspec);
+
+  pspec = g_param_spec_boxed ("params",
+                              "params",
+                              "params",
+                              G_TYPE_HASH_TABLE,
+                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_PARAMS, pspec);
 }
 
 static void

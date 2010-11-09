@@ -1,16 +1,42 @@
+/*
+ * libsocialweb Sina service support
+ *
+ * Copyright (C) 2010 Novell, Inc.
+ *
+ * Author: Gary Ching-Pang Lin <glin@novell.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU Lesser General Public License,
+ * version 2.1, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include <config.h>
+
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
-#include "sina.h"
+#include <glib/gi18n.h>
+#include <dbus/dbus-glib-lowlevel.h>
+
 #include <libsocialweb/sw-item.h>
 #include <libsocialweb/sw-set.h>
 #include <libsocialweb/sw-online.h>
 #include <libsocialweb/sw-utils.h>
 #include <libsocialweb/sw-web.h>
 #include <libsocialweb/sw-debug.h>
+#include <libsocialweb/sw-client-monitor.h>
 #include <libsocialweb-keyfob/sw-keyfob.h>
 #include <libsocialweb-keystore/sw-keystore.h>
+
 #include <rest/oauth-proxy.h>
 #include <rest/oauth-proxy-call.h>
 #include <rest/rest-xml-parser.h>
@@ -20,6 +46,7 @@
 #include <interfaces/sw-avatar-ginterface.h>
 #include <interfaces/sw-status-update-ginterface.h>
 
+#include "sina.h"
 #include "sina-item-view.h"
 
 static void initable_iface_init (gpointer g_iface, gpointer iface_data);
@@ -44,12 +71,6 @@ G_DEFINE_TYPE_WITH_CODE (SwServiceSina,
 
 struct _SwServiceSinaPrivate {
   gboolean inited;
-  enum {
-    OWN,
-    FRIENDS,
-    BOTH
-  } type;
-  gboolean running;
   RestProxy *proxy;
   char *user_id;
   char *image_url;
@@ -118,6 +139,12 @@ get_static_caps (SwService *service)
 {
   static const char * caps[] = {
     CAN_VERIFY_CREDENTIALS,
+    HAS_UPDATE_STATUS_IFACE,
+    HAS_AVATAR_IFACE,
+    HAS_BANISHABLE_IFACE,
+    HAS_QUERY_IFACE,
+
+    /* deprecated */
     CAN_UPDATE_STATUS,
     CAN_REQUEST_AVATAR,
     NULL
@@ -160,233 +187,7 @@ get_dynamic_caps (SwService *service)
     return no_caps;
 }
 
-static void
-start (SwService *service)
-{
-  SwServiceSina *sina = (SwServiceSina*)service;
-
-  sina->priv->running = TRUE;
-}
-
-static char*
-make_date (const char *s)
-{
-  struct tm tm = {0};
-  strptime (s, "%A %h %d %T %z %Y", &tm);
-  return sw_time_t_to_string (mktime (&tm));
-}
-
-static void
-_populate_set_from_node (SwService   *service,
-                         SwSet       *set,
-                         RestXmlNode *root)
-{
-  RestXmlNode *node;
-
-  if (!root)
-    return;
-
-  node = rest_xml_node_find (root, "status");
-  while (node) {
-    SwItem *item;
-    RestXmlNode *user;
-    char *id, *date, *uid, *url;
-
-    item = sw_item_new ();
-    sw_item_set_service (item, service);
-
-    user = rest_xml_node_find (node, "user");
-
-    id = g_strconcat ("sina-",
-                      get_child_node_value (node, "id"),
-                      NULL);
-    sw_item_take (item, "id", id);
-
-    date = get_child_node_value (node, "created_at");
-    sw_item_take (item, "date", make_date (date));
-    g_free (date);
-
-    sw_item_take (item,
-                  "author",
-                  get_child_node_value (user, "screen_name"));
-
-    url = get_child_node_value (user, "profile_image_url");
-    sw_item_request_image_fetch (item, FALSE, "authoricon", url);
-    g_free (url);
-
-    sw_item_take (item,
-                  "content",
-                  get_child_node_value (node, "text"));
-
-    uid = get_child_node_value (user, "id");
-    url = g_strconcat ("http://t.sina.com.cn/", uid, NULL);
-    sw_item_take (item, "url", url);
-    g_free (uid);
-
-    sw_set_add (set, G_OBJECT (item));
-    g_object_unref (item);
-
-    /* Next node */
-    node = node->next;
-  }
-}
-
-static void _get_user_status_updates (SwServiceSina *sina, SwSet *set);
-
-static void
-_got_user_status_cb (RestProxyCall *call,
-                     const GError  *error,
-                     GObject       *weak_object,
-                     gpointer       userdata)
-{
-  SwService *service = SW_SERVICE (weak_object);
-  RestXmlNode *root;
-  SwSet *set = (SwSet *)userdata;
-
-  if (error) {
-    g_message ("Error: %s", error->message);
-    return;
-  }
-
-  root = node_from_call (call);
-  _populate_set_from_node (service, set, root);
-  rest_xml_node_unref (root);
-
-  if (!sw_set_is_empty (set))
-    sw_service_emit_refreshed (service, set);
-
-  sw_set_unref (set);
-}
-
-static void
-_got_friends_status_cb (RestProxyCall *call,
-                        const GError  *error,
-                        GObject       *weak_object,
-                        gpointer       userdata)
-{
-  SwService *service = SW_SERVICE (weak_object);
-  SwServiceSina *sina = SW_SERVICE_SINA (service);
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
-  RestXmlNode *root;
-  SwSet *set = (SwSet *)userdata;
-
-  if (error) {
-    g_message ("Error: %s", error->message);
-    return;
-  }
-
-  root = node_from_call (call);
-  _populate_set_from_node (service, set, root);
-  rest_xml_node_unref (root);
-
-  if (priv->type == BOTH)
-  {
-    _get_user_status_updates (sina, set);
-    return;
-  }
-
-  if (!sw_set_is_empty (set))
-    sw_service_emit_refreshed (service, set);
-
-  sw_set_unref (set);
-}
-
-static void
-_get_user_status_updates (SwServiceSina *sina,
-                          SwSet         *set)
-{
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
-  RestProxyCall *call;
-
-  call = rest_proxy_new_call (priv->proxy);
-  rest_proxy_call_set_function (call, "statuses/user_timeline.xml");
-  rest_proxy_call_add_params(call,
-                             "count", "10",
-                             NULL);
-  rest_proxy_call_async (call, _got_user_status_cb, (GObject*)sina, set, NULL);
-}
-
-static void
-_get_friends_status_update (SwServiceSina *sina,
-                            SwSet         *set)
-{
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
-  RestProxyCall *call;
-
-  call = rest_proxy_new_call (priv->proxy);
-  rest_proxy_call_set_function (call, "statuses/friends_timeline.xml");
-  rest_proxy_call_add_params(call,
-                             "count", "10",
-                             NULL);
-  rest_proxy_call_async (call, _got_friends_status_cb, (GObject*)sina, set, NULL);
-}
-
-static void
-get_status_updates (SwServiceSina *sina)
-{
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
-  SwSet *set;
-
-  g_assert (priv->user_id);
-
-  set = sw_item_set_new ();
-
-  if (sw_service_get_param ((SwService *)sina, "own")) {
-    priv->type = OWN;
-  } else if (sw_service_get_param ((SwService *)sina, "friends")){
-    priv->type = FRIENDS;
-  } else {
-    priv->type = BOTH;
-  }
-
-  if (priv->type == OWN) {
-    _get_user_status_updates (sina, set);
-  } else {
-    /* For BOTH this triggers into user */
-    _get_friends_status_update (sina, set);
-  }
-}
-
 static void got_tokens_cb (RestProxy *proxy, gboolean authorised, gpointer user_data);
-
-static void
-refresh (SwService *service)
-{
-  SwServiceSina *sina = SW_SERVICE_SINA (service);
-  SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
-
-  if (!priv->running || !priv->proxy)
-    return;
-
-  if (priv->user_id == NULL) {
-    sw_keyfob_oauth ((OAuthProxy*)priv->proxy, got_tokens_cb, service);
-  } else {
-    get_status_updates (sina);
-  }
-}
-
-static void
-avatar_downloaded_cb (const gchar *uri,
-                      gchar       *local_path,
-                      gpointer     userdata)
-{
-  SwService *service = SW_SERVICE (userdata);
-
-  sw_service_emit_avatar_retrieved (service, local_path);
-  g_free (local_path);
-}
-
-static void
-request_avatar (SwService *service)
-{
-  SwServiceSinaPrivate *priv = GET_PRIVATE (service);
-
-  if (priv->image_url) {
-    sw_web_download_image_async (priv->image_url,
-                                 avatar_downloaded_cb,
-                                 service);
-  }
-}
 
 static void
 got_user_cb (RestProxyCall *call,
@@ -416,9 +217,6 @@ got_user_cb (RestProxyCall *call,
 
   sw_service_emit_capabilities_changed
     (service, get_dynamic_caps (service));
-
-  if (priv->running)
-    get_status_updates (sina);
 }
 
 static void
@@ -432,8 +230,6 @@ got_tokens_cb (RestProxy *proxy, gboolean authorised, gpointer user_data)
     call = rest_proxy_new_call (priv->proxy);
     rest_proxy_call_set_function (call, "account/verify_credentials.xml");
     rest_proxy_call_async (call, got_user_cb, (GObject*)sina, NULL, NULL);
-  } else {
-    sw_service_emit_refreshed ((SwService *)sina, NULL);
   }
 }
 
@@ -444,16 +240,8 @@ online_notify (gboolean online, gpointer user_data)
   SwServiceSinaPrivate *priv = GET_PRIVATE (sina);
 
   if (online) {
-    const char *key = NULL, *secret = NULL;
-    sw_keystore_get_key_secret ("sina", &key, &secret);
-    priv->proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
     sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, sina);
   } else {
-    if (priv->proxy) {
-      g_object_unref (priv->proxy);
-      priv->proxy = NULL;
-    }
-
     g_free (priv->user_id);
     priv->user_id = NULL;
 
@@ -466,17 +254,22 @@ online_notify (gboolean online, gpointer user_data)
 }
 
 static void
-credentials_updated (SwService *service)
+refresh_credentials (SwServiceSina *sina)
 {
   /* If we're online, force a reconnect to fetch new credentials */
   if (sw_is_online ()) {
-    online_notify (FALSE, service);
-    online_notify (TRUE, service);
+    online_notify (FALSE, sina);
+    online_notify (TRUE, sina);
   }
 
-  sw_service_emit_user_changed (service);
-  sw_service_emit_capabilities_changed ((SwService *)service,
-                                        get_dynamic_caps (service));
+  sw_service_emit_capabilities_changed ((SwService *)sina,
+                                        get_dynamic_caps ((SwService *)sina));
+}
+
+static void
+credentials_updated (SwService *service)
+{
+  refresh_credentials (SW_SERVICE_SINA (service));
 }
 
 static const char *
@@ -524,11 +317,8 @@ sw_service_sina_class_init (SwServiceSinaClass *klass)
   object_class->finalize = sw_service_sina_finalize;
 
   service_class->get_name = sw_service_sina_get_name;
-  service_class->start = start;
-  service_class->refresh = refresh;
   service_class->get_static_caps = get_static_caps;
   service_class->get_dynamic_caps = get_dynamic_caps;
-  service_class->request_avatar = request_avatar;
   service_class->credentials_updated = credentials_updated;
 }
 
@@ -563,8 +353,11 @@ sw_service_sina_initable (GInitable    *initable,
                          "No API key configured");
     return FALSE;
   }
+  priv->proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
 
   sw_online_add_notify (online_notify, sina);
+
+  refresh_credentials (sina);
 
   priv->inited = TRUE;
 
@@ -580,8 +373,27 @@ initable_iface_init (gpointer g_iface, gpointer iface_data)
 }
 
 /* Query interface */
+
+static const gchar *valid_queries[] = {"feed",
+                                       "own"};
+
+static gboolean
+_check_query_validity (const gchar *query)
+{
+  gint i = 0;
+
+  for (i = 0; i < G_N_ELEMENTS(valid_queries); i++)
+  {
+    if (g_str_equal (query, valid_queries[i]))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
 static void
 _sina_query_open_view (SwQueryIface          *self,
+                       const gchar           *query,
                        GHashTable            *params,
                        DBusGMethodInvocation *context)
 {
@@ -589,12 +401,27 @@ _sina_query_open_view (SwQueryIface          *self,
   SwItemView *item_view;
   const gchar *object_path;
 
+  if (!_check_query_validity (query))
+  {
+    dbus_g_method_return_error (context,
+                                g_error_new (SW_SERVICE_ERROR,
+                                             SW_SERVICE_ERROR_INVALID_QUERY,
+                                             "Query '%s' is invalid",
+                                             query));
+    return;
+  }
+
   item_view = g_object_new (SW_TYPE_SINA_ITEM_VIEW,
                             "proxy", priv->proxy,
                             "service", self,
+                            "query", query,
+                            "params", params,
                             NULL);
 
   object_path = sw_item_view_get_object_path (item_view);
+  /* Ensure the object gets disposed when the client goes away */
+  sw_client_monitor_add (dbus_g_method_get_sender (context),
+                         (GObject *)item_view);
   sw_query_iface_return_from_open_view (context,
                                         object_path);
 }
