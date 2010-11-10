@@ -18,26 +18,35 @@
  */
 
 #include <config.h>
+
 #include <time.h>
 #include <string.h>
-#include "myspace.h"
 #include <gio/gio.h>
-#include <pango/pango.h>
+#include <glib/gi18n.h>
+#include <dbus/dbus-glib-lowlevel.h>
+
 #include <libsocialweb/sw-item.h>
 #include <libsocialweb/sw-set.h>
-#include <libsocialweb/sw-utils.h>
-#include <libsocialweb/sw-web.h>
-#include <libsocialweb-keyfob/sw-keyfob.h>
-#include <libsocialweb-keystore/sw-keystore.h>
-#include <rest/oauth-proxy.h>
-#include <rest/rest-xml-parser.h>
 #include <libsocialweb/sw-online.h>
 #include <libsocialweb/sw-debug.h>
+#include <libsocialweb/sw-utils.h>
+#include <libsocialweb/sw-web.h>
+#include <libsocialweb/sw-client-monitor.h>
+#include <libsocialweb-keyfob/sw-keyfob.h>
+#include <libsocialweb-keystore/sw-keystore.h>
 
+#include <rest/oauth-proxy.h>
+#include <rest/rest-xml-parser.h>
+
+#include <interfaces/sw-query-ginterface.h>
 #include <interfaces/sw-avatar-ginterface.h>
 #include <interfaces/sw-status-update-ginterface.h>
 
+#include "myspace.h"
+#include "myspace-item-view.h"
+
 static void initable_iface_init (gpointer g_iface, gpointer iface_data);
+static void query_iface_init (gpointer g_iface, gpointer iface_data);
 static void avatar_iface_init (gpointer g_iface, gpointer iface_data);
 static void status_update_iface_init (gpointer g_iface, gpointer iface_data);
 
@@ -46,6 +55,8 @@ G_DEFINE_TYPE_WITH_CODE (SwServiceMySpace,
                          SW_TYPE_SERVICE,
                          G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
                                                 initable_iface_init)
+                         G_IMPLEMENT_INTERFACE (SW_TYPE_QUERY_IFACE,
+                                                query_iface_init)
                          G_IMPLEMENT_INTERFACE (SW_TYPE_AVATAR_IFACE,
                                                 avatar_iface_init)
                          G_IMPLEMENT_INTERFACE (SW_TYPE_STATUS_UPDATE_IFACE,
@@ -57,22 +68,19 @@ G_DEFINE_TYPE_WITH_CODE (SwServiceMySpace,
 
 struct _SwServiceMySpacePrivate {
   gboolean inited;
-  gboolean running;
+  enum {
+    OFFLINE,
+    CREDS_INVALID,
+    CREDS_VALID
+  } credentials;
   RestProxy *proxy;
   char *user_id;
   char *display_name;
   char *profile_url;
   char *image_url;
-    enum {
-    OWN,
-    FRIENDS,
-    BOTH
-  } type;
 };
 
-static GList *service_list = NULL;
-
-RestXmlNode *
+static RestXmlNode *
 node_from_call (RestProxyCall *call)
 {
   static RestXmlParser *parser = NULL;
@@ -115,231 +123,6 @@ node_from_call (RestProxyCall *call)
     rest_xml_node_unref (root);
     return NULL;
   }
-}
-
-static void
-_populate_set_from_node (SwService   *service,
-                         SwSet       *set,
-                         RestXmlNode *root)
-{
-  SwServiceMySpacePrivate *priv = SW_SERVICE_MYSPACE (service)->priv;
-  RestXmlNode *node;
-
-  if (!root)
-    return;
-
-  /*
-   * The result of /status is a <user> node, whereas /friends/status is
-   * <user><friends><user>. Look closely to find out what data we have
-   */
-  node = rest_xml_node_find (root, "friends");
-  if (node) {
-    node = rest_xml_node_find (node, "user");
-  } else {
-    node = root;
-  }
-
-  while (node) {
-    /*
-      <user>
-      <userid>188488921</userid>
-      <imageurl>http://c3.ac-images.myspacecdn.com/images02/110/s_768909a648e740939422bdc875ff2bf2.jpg</imageurl>
-      <profileurl>http://www.myspace.com/cwiiis</profileurl>
-      <name>Cwiiis</name>
-      <mood>neutral</mood>
-      <moodimageurl>http://x.myspacecdn.com/images/blog/moods/iBrads/amused.gif</moodimageurl>
-      <moodlastupdated>15/04/2009 04:20:59</moodlastupdated>
-      <status>haha, Ross has myspace</status>
-      </user>
-    */
-    SwItem *item;
-    char *id, *status;
-    RestXmlNode *subnode;
-    gint64 date;
-
-    item = sw_item_new ();
-    sw_item_set_service (item, service);
-
-    id = g_strconcat ("myspace-",
-                      rest_xml_node_find (node, "userid")->content,
-                      "-",
-                      rest_xml_node_find (node, "moodlastupdated")->content,
-                      NULL);
-    sw_item_take (item, "id", id);
-
-    date = atoi (rest_xml_node_find (node, "moodlastupdated")->content);
-    /* Time correction. This is bad... */
-    date += (15*60*60);
-    sw_item_take (item, "date", sw_time_t_to_string (date));
-
-    sw_item_put (item, "authorid", rest_xml_node_find (node, "userid")->content);
-    subnode = rest_xml_node_find (node, "name");
-    if (subnode && subnode->content)
-      sw_item_put (item, "author", subnode->content);
-    else
-      sw_item_put (item, "author", priv->display_name);
-
-    subnode = rest_xml_node_find (node, "imageurl");
-    if (subnode && subnode->content)
-      sw_item_request_image_fetch (item, FALSE, "authoricon", subnode->content);
-
-    pango_parse_markup (rest_xml_node_find (node, "status")->content,
-                        -1,
-                        0,
-                        NULL,
-                        &status,
-                        NULL,
-                        NULL);
-    sw_item_put (item, "content", status);
-    /* TODO: if mood is not "(none)" then append that to the status message */
-
-    subnode = rest_xml_node_find (node, "profileurl");
-    if (subnode && subnode->content)
-      sw_item_put (item, "url", subnode->content);
-    else
-      sw_item_put (item, "url", priv->profile_url);
-
-    sw_set_add (set, G_OBJECT (item));
-    g_object_unref (item);
-
-    node = node->next;
-  }
-}
-
-static void
-_get_user_status_updates (SwServiceMySpace *service,
-                          SwSet            *set);
-
-static void
-_got_user_status_cb (RestProxyCall *call,
-                     const GError  *error,
-                     GObject       *weak_object,
-                     gpointer       userdata)
-{
-  SwService *service = SW_SERVICE (weak_object);
-  RestXmlNode *root;
-  SwSet *set = (SwSet *)userdata;
-
-  if (error) {
-    g_message ("Error: %s", error->message);
-    return;
-  }
-
-  root = node_from_call (call);
-  _populate_set_from_node (service, set, root);
-  rest_xml_node_unref (root);
-
-  if (!sw_set_is_empty (set))
-    sw_service_emit_refreshed (service, set);
-
-  sw_set_unref (set);
-}
-
-static void
-_got_friends_status_cb (RestProxyCall *call,
-                        const GError  *error,
-                        GObject       *weak_object,
-                        gpointer       userdata)
-{
-  SwService *service = SW_SERVICE (weak_object);
-  SwServiceMySpace *myspace = (SwServiceMySpace *)service;
-  SwServiceMySpacePrivate *priv = myspace->priv;
-  RestXmlNode *root;
-  SwSet *set = (SwSet *)userdata;
-
-  if (error) {
-    g_message ("Error: %s", error->message);
-    return;
-  }
-
-  root = node_from_call (call);
-  _populate_set_from_node (service, set, root);
-  rest_xml_node_unref (root);
-
-  if (priv->type == BOTH)
-  {
-    _get_user_status_updates (myspace, set);
-    return;
-  }
-
-  if (!sw_set_is_empty (set))
-    sw_service_emit_refreshed (service, set);
-
-  sw_set_unref (set);
-}
-
-static void
-_get_user_status_updates (SwServiceMySpace *service,
-                          SwSet            *set)
-{
-  SwServiceMySpacePrivate *priv = service->priv;
-  RestProxyCall *call;
-  char *function;
-
-  call = rest_proxy_new_call (priv->proxy);
-
-  rest_proxy_call_add_params(call,
-                             "dateFormat", "utc",
-                             "timeZone", "0",
-                             NULL);
-  function = g_strdup_printf ("v1/users/%s/status", priv->user_id);
-  rest_proxy_call_set_function (call, function);
-  g_free (function);
-
-  rest_proxy_call_async (call, _got_user_status_cb, (GObject*)service, set, NULL);
-}
-
-static void
-_get_friends_status_update (SwServiceMySpace *service,
-                            SwSet            *set)
-{
-  SwServiceMySpacePrivate *priv = service->priv;
-  RestProxyCall *call;
-  char *function;
-
-  call = rest_proxy_new_call (priv->proxy);
-
-  rest_proxy_call_add_params(call,
-                             "dateFormat", "utc",
-                             "timeZone", "0",
-                             NULL);
-  function = g_strdup_printf ("v1/users/%s/friends/status", priv->user_id);
-  rest_proxy_call_set_function (call, function);
-  g_free (function);
-
-  rest_proxy_call_async (call, _got_friends_status_cb, (GObject*)service, set, NULL);
-}
-
-static void
-get_status_updates (SwServiceMySpace *service)
-{
-  SwServiceMySpacePrivate *priv = service->priv;
-  GHashTable *params = NULL;
-  SwSet *set;
-
-  g_assert (priv->user_id);
-
-  g_object_get (service, "params", &params, NULL);
-
-  set = sw_item_set_new ();
-
-  if (sw_service_get_param ((SwService *)service, "own")) {
-    priv->type = OWN;
-  } else if (sw_service_get_param ((SwService *)service, "friends")){
-    priv->type = FRIENDS;
-  } else {
-    priv->type = BOTH;
-  }
-
-  if (priv->type == OWN) {
-    _get_user_status_updates (service, set);
-  } else {
-    /* For BOTH this triggers into user */
-    _get_friends_status_update (service, set);
-  }
-
-  if (params)
-    g_hash_table_unref (params);
 }
 
 /*
@@ -440,11 +223,7 @@ got_user_cb (RestProxyCall *call,
 
   rest_xml_node_unref (node);
 
-  sw_service_emit_capabilities_changed
-    (service, get_dynamic_caps (service));
-
-  if (priv->running)
-    get_status_updates (myspace);
+  sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
 }
 
 static void
@@ -458,58 +237,6 @@ got_tokens_cb (RestProxy *proxy, gboolean authorised, gpointer user_data)
     call = rest_proxy_new_call (priv->proxy);
     rest_proxy_call_set_function (call, "v1/user");
     rest_proxy_call_async (call, got_user_cb, (GObject*)myspace, NULL, NULL);
-  } else {
-    sw_service_emit_refreshed ((SwService *)myspace, NULL);
-  }
-}
-
-static void
-start (SwService *service)
-{
-  SwServiceMySpace *myspace = (SwServiceMySpace*)service;
-
-  myspace->priv->running = TRUE;
-}
-
-static void
-refresh (SwService *service)
-{
-  SwServiceMySpace *myspace = (SwServiceMySpace*)service;
-  SwServiceMySpacePrivate *priv = myspace->priv;
-
-  if (!priv->running || !priv->proxy)
-    return;
-
-  if (priv->user_id == NULL) {
-    sw_keyfob_oauth ((OAuthProxy*)priv->proxy, got_tokens_cb, service);
-  } else {
-    get_status_updates (myspace);
-  }
-}
-
-static void
-_avatar_downloaded_cb (const gchar *uri,
-                       gchar       *local_path,
-                       gpointer     userdata)
-{
-  SwService *service = SW_SERVICE (userdata);
-
-  sw_service_emit_avatar_retrieved (service, local_path);
-  g_free (local_path);
-}
-
-static void
-request_avatar (SwService *service)
-{
-  SwServiceMySpacePrivate *priv = GET_PRIVATE (service);
-
-  if (priv->image_url)
-  {
-    sw_web_download_image_async (priv->image_url,
-                                     _avatar_downloaded_cb,
-                                     service);
-  } else {
-    sw_service_emit_avatar_retrieved (service, NULL);
   }
 }
 
@@ -528,14 +255,8 @@ online_notify (gboolean online, gpointer user_data)
   if (online) {
     const char *key = NULL, *secret = NULL;
     sw_keystore_get_key_secret ("myspace", &key, &secret);
-    priv->proxy = oauth_proxy_new (key, secret, "http://api.myspace.com/", FALSE);
     sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, service);
   } else {
-    if (priv->proxy) {
-      g_object_unref (priv->proxy);
-      priv->proxy = NULL;
-    }
-
     g_free (priv->user_id);
     priv->user_id = NULL;
 
@@ -550,20 +271,13 @@ online_notify (gboolean online, gpointer user_data)
 static
 void credentials_updated (SwService *service)
 {
-  SwService *service_instance;
-  GList* node;
-
-  SW_DEBUG (MYSPACE, "Credentials updated");
+  /* FIXME REWRITE THIS FUNCTION!!! */
   /* If we're online, force a reconnect to fetch new credentials */
   if (sw_is_online ()) {
-    for (node = service_list; node; node = g_list_next(node)){
-      service_instance = SW_SERVICE (node->data);
+    online_notify (FALSE, service);
+    online_notify (TRUE, service);
 
-      online_notify (FALSE, service_instance);
-      online_notify (TRUE, service_instance);
-
-      sw_service_emit_user_changed (service_instance);
-    }
+    sw_service_emit_user_changed (service);
   }
 }
 
@@ -571,8 +285,6 @@ static void
 sw_service_myspace_dispose (GObject *object)
 {
   SwServiceMySpacePrivate *priv = SW_SERVICE_MYSPACE (object)->priv;
-
-  service_list = g_list_remove (service_list, object);
 
   sw_online_remove_notify (online_notify, object);
 
@@ -608,9 +320,6 @@ sw_service_myspace_class_init (SwServiceMySpaceClass *klass)
   service_class->get_name = sw_service_myspace_get_name;
   service_class->get_static_caps = get_static_caps;
   service_class->get_dynamic_caps = get_dynamic_caps;
-  service_class->start = start;
-  service_class->refresh = refresh;
-  service_class->request_avatar = request_avatar;
   service_class->credentials_updated = credentials_updated;
 }
 
@@ -619,8 +328,6 @@ sw_service_myspace_init (SwServiceMySpace *self)
 {
   self->priv = GET_PRIVATE (self);
   self->priv->inited = FALSE;
-
-  service_list = g_list_prepend (service_list, self);
 }
 
 /* Initable interface */
@@ -645,6 +352,7 @@ sw_service_myspace_initable (GInitable     *initable,
                          "No API key configured");
     return FALSE;
   }
+  priv->proxy = oauth_proxy_new (key, secret, "http://api.myspace.com/", FALSE);
 
   if (sw_is_online ()) {
     online_notify (TRUE, myspace);
@@ -662,6 +370,70 @@ initable_iface_init (gpointer g_iface, gpointer iface_data)
   GInitableIface *klass = (GInitableIface *)g_iface;
 
   klass->init = sw_service_myspace_initable;
+}
+
+/* Query interface */
+
+static const gchar *valid_queries[] = {"feed",
+                                       "own"};
+static gboolean
+_check_query_validity (const gchar *query)
+{
+  gint i = 0;
+
+  for (i = 0; i < G_N_ELEMENTS(valid_queries); i++)
+  {
+    if (g_str_equal (query, valid_queries[i]))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+static void
+_myspace_query_open_view (SwQueryIface          *self,
+                          const gchar           *query,
+                          GHashTable            *params,
+                          DBusGMethodInvocation *context)
+{
+  SwServiceMySpacePrivate *priv = GET_PRIVATE (self);
+  SwItemView *item_view;
+  const gchar *object_path;
+
+  if (!_check_query_validity (query))
+  {
+    dbus_g_method_return_error (context,
+                                g_error_new (SW_SERVICE_ERROR,
+                                             SW_SERVICE_ERROR_INVALID_QUERY,
+                                             "Query '%s' is invalid",
+                                             query));
+    return;
+  }
+
+  item_view = g_object_new (SW_TYPE_MYSPACE_ITEM_VIEW,
+                            "proxy", priv->proxy,
+                            "user_id", priv->user_id,
+                            "service", self,
+                            "query", query,
+                            "params", params,
+                            NULL);
+
+  object_path = sw_item_view_get_object_path (item_view);
+  /* Ensure the object gets disposed when the client goes away */
+  sw_client_monitor_add (dbus_g_method_get_sender (context),
+                         (GObject *)item_view);
+  sw_query_iface_return_from_open_view (context,
+                                        object_path);
+}
+
+static void
+query_iface_init (gpointer g_iface,
+                  gpointer iface_data)
+{
+  SwQueryIfaceClass *klass = (SwQueryIfaceClass*)g_iface;
+
+  sw_query_iface_implement_open_view (klass,
+                                      _myspace_query_open_view);
 }
 
 /* Avatar interface */
@@ -715,7 +487,6 @@ _update_status_cb (RestProxyCall *call,
                 error->message);
     sw_status_update_iface_emit_status_updated (weak_object, FALSE);
   } else {
-    SW_DEBUG (MYSPACE, G_STRLOC ": Status updated.");
     sw_status_update_iface_emit_status_updated (weak_object, TRUE);
   }
 }
