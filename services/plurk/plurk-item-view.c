@@ -47,7 +47,7 @@ typedef struct _SwPlurkItemViewPrivate SwPlurkItemViewPrivate;
 
 struct _SwPlurkItemViewPrivate {
   RestProxy *proxy;
-  char *api_key;
+  gchar *api_key;
   guint timeout_id;
   GHashTable *params;
   gchar *query;
@@ -560,6 +560,13 @@ sw_plurk_item_view_class_init (SwPlurkItemViewClass *klass)
                                REST_TYPE_PROXY,
                                G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   g_object_class_install_property (object_class, PROP_PROXY, pspec);
+
+  pspec = g_param_spec_string ("api_key",
+                               "api_key",
+                               "api_key",
+                               NULL,
+                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_APIKEY, pspec);
 
   pspec = g_param_spec_string ("query",
                                "query",
