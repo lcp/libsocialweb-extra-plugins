@@ -72,5 +72,7 @@ AC_OUTPUT([
         services/youtube/Makefile
         services/plurk/Makefile
         services/sina/Makefile
+        services/myspace/Makefile
+        services/digg/Makefile
 	po/Makefile.in
 ])
