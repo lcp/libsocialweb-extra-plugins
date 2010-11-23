@@ -256,6 +256,7 @@ online_notify (gboolean online, gpointer user_data)
 static void
 refresh_credentials (SwServiceSina *sina)
 {
+  /* FIXME REWRITE THIS FUNCTION!!! */
   /* If we're online, force a reconnect to fetch new credentials */
   if (sw_is_online ()) {
     online_notify (FALSE, sina);
