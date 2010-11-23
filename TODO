@@ -1,3 +1,4 @@
 - Migrate all services to MeeGo 1.1
 - Update myspace to use OpenSocial API
 - Merge facebook if necessary
+- Enable geolocation
