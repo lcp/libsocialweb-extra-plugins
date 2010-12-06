@@ -148,35 +148,20 @@ get_child_node_value (RestXmlNode *node, const char *name)
 }
 
 gboolean
-account_is_configured (OAuthProxy *proxy)
+account_is_configured ()
 {
-  char *server = NULL, *key = NULL, *password = NULL;
-  GnomeKeyringResult result;
-  GnomeKeyringPasswordSchema oauth_schema = {
-    GNOME_KEYRING_ITEM_GENERIC_SECRET,
-    {
-      { "server", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
-      { "consumer-key", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
-      { NULL, 0 }
-    }
-  };
+  RestProxy *proxy;
+  gboolean configured = FALSE;
+  const char *key = NULL, *secret = NULL;
 
-  g_object_get (proxy,
-                "url-format", &server,
-                "consumer-key", &key,
-                NULL);
+  sw_keystore_get_key_secret ("myspace", &key, &secret);
+  proxy = oauth_proxy_new (key, secret, "http://api.myspace.com/", FALSE);
 
-  result = gnome_keyring_find_password_sync (&oauth_schema, &password,
-                                             "server", server,
-                                             "consumer-key", key,
-                                             NULL);
-  g_free (server);
-  g_free (key);
+  configured = sw_keyfob_oauth_sync ((OAuthProxy *)proxy);
 
-  if (result == GNOME_KEYRING_RESULT_OK)
-    return TRUE;
-  else
-    return FALSE;
+  g_object_unref (proxy);
+
+  return configured;
 }
 
 static const char **
