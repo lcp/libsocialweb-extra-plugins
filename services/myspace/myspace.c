@@ -147,7 +147,7 @@ get_child_node_value (RestXmlNode *node, const char *name)
     return NULL;
 }
 
-gboolean
+static gboolean
 account_is_configured ()
 {
   RestProxy *proxy;
