@@ -256,15 +256,8 @@ online_notify (gboolean online, gpointer user_data)
 static void
 refresh_credentials (SwServiceSina *sina)
 {
-  /* FIXME REWRITE THIS FUNCTION!!! */
-  /* If we're online, force a reconnect to fetch new credentials */
-  if (sw_is_online ()) {
-    online_notify (FALSE, sina);
-    online_notify (TRUE, sina);
-  }
-
-  sw_service_emit_capabilities_changed ((SwService *)sina,
-                                        get_dynamic_caps ((SwService *)sina));
+  SwServiceSinaPrivate *priv = sina->priv;
+  sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, sina);
 }
 
 static void
