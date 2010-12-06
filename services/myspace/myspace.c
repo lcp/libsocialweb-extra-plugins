@@ -200,7 +200,7 @@ get_dynamic_caps (SwService *service)
   if (myspace->priv->user_id)
     return caps;
 
-  configured = account_is_configured ((OAuthProxy *)priv->proxy);
+  configured = account_is_configured ();
 
   if (configured) 
     return configured_caps;
