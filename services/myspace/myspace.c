@@ -182,7 +182,6 @@ static const char **
 get_dynamic_caps (SwService *service)
 {
   SwServiceMySpace *myspace = SW_SERVICE_MYSPACE (service);
-  SwServiceMySpacePrivate *priv = GET_PRIVATE (myspace);
   gboolean configured = FALSE;
   static const char * caps[] = {
     IS_CONFIGURED,
