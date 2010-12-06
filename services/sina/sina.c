@@ -134,6 +134,23 @@ get_child_node_value (RestXmlNode *node, const char *name)
     return NULL;
 }
 
+static gboolean
+account_is_configured ()
+{ 
+  RestProxy *proxy;
+  gboolean configured = FALSE;
+  const char *key = NULL, *secret = NULL;
+
+  sw_keystore_get_key_secret ("sina", &key, &secret);
+  proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
+  
+  configured = sw_keyfob_oauth_sync ((OAuthProxy *)proxy);
+  
+  g_object_unref (proxy);
+ 
+  return configured;
+}
+
 static const char **
 get_static_caps (SwService *service)
 {
@@ -157,6 +174,7 @@ static const char **
 get_dynamic_caps (SwService *service)
 {
   SwServiceSinaPrivate *priv = SW_SERVICE_SINA (service)->priv;
+  gboolean configured = FALSE;
   static const char *no_caps[] = { NULL };
   static const char *configured_caps[] = {
     IS_CONFIGURED,
@@ -169,17 +187,11 @@ get_dynamic_caps (SwService *service)
     CAN_REQUEST_AVATAR,
     NULL
   };
-  const char *key = NULL, *secret = NULL;
-  gboolean configured = FALSE;
-  RestProxy *proxy;
 
   if (priv->user_id)
     return full_caps;
 
-  sw_keystore_get_key_secret ("sina", &key, &secret);
-  proxy = oauth_proxy_new (key, secret, "http://api.t.sina.com.cn/", FALSE);
-  configured = sw_keyfob_oauth_check_credential ((OAuthProxy *)proxy);
-  g_object_unref (proxy);
+  configured = account_is_configured ();
 
   if (configured)
     return configured_caps;
