@@ -23,6 +23,7 @@
 #include <string.h>
 #include <gio/gio.h>
 #include <glib/gi18n.h>
+#include <gnome-keyring.h>
 #include <dbus/dbus-glib-lowlevel.h>
 
 #include <libsocialweb/sw-item.h>
@@ -75,8 +76,6 @@ struct _SwServiceMySpacePrivate {
   } credentials;
   RestProxy *proxy;
   char *user_id;
-  char *display_name;
-  char *profile_url;
   char *image_url;
 };
 
@@ -148,6 +147,38 @@ get_child_node_value (RestXmlNode *node, const char *name)
     return NULL;
 }
 
+gboolean
+account_is_configured (OAuthProxy *proxy)
+{
+  char *server = NULL, *key = NULL, *password = NULL;
+  GnomeKeyringResult result;
+  GnomeKeyringPasswordSchema oauth_schema = {
+    GNOME_KEYRING_ITEM_GENERIC_SECRET,
+    {
+      { "server", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
+      { "consumer-key", GNOME_KEYRING_ATTRIBUTE_TYPE_STRING },
+      { NULL, 0 }
+    }
+  };
+
+  g_object_get (proxy,
+                "url-format", &server,
+                "consumer-key", &key,
+                NULL);
+
+  result = gnome_keyring_find_password_sync (&oauth_schema, &password,
+                                             "server", server,
+                                             "consumer-key", key,
+                                             NULL);
+  g_free (server);
+  g_free (key);
+
+  if (result == GNOME_KEYRING_RESULT_OK)
+    return TRUE;
+  else
+    return FALSE;
+}
+
 static const char **
 get_static_caps (SwService *service)
 {
@@ -166,6 +197,8 @@ static const char **
 get_dynamic_caps (SwService *service)
 {
   SwServiceMySpace *myspace = SW_SERVICE_MYSPACE (service);
+  SwServiceMySpacePrivate *priv = GET_PRIVATE (myspace);
+  gboolean configured = FALSE;
   static const char * caps[] = {
     IS_CONFIGURED,
     CREDENTIALS_VALID,
@@ -182,13 +215,7 @@ get_dynamic_caps (SwService *service)
   if (myspace->priv->user_id)
     return caps;
 
-  const char *key = NULL, *secret = NULL;
-  gboolean configured = FALSE;
-  RestProxy *proxy;
-  sw_keystore_get_key_secret ("myspace", &key, &secret);
-  proxy = oauth_proxy_new (key, secret, "http://api.myspace.com/", FALSE);
-  configured = sw_keyfob_oauth_check_credential ((OAuthProxy *)proxy);
-  g_object_unref (proxy);
+  configured = account_is_configured ((OAuthProxy *)priv->proxy);
 
   if (configured) 
     return configured_caps;
@@ -217,8 +244,6 @@ got_user_cb (RestProxyCall *call,
     return;
 
   priv->user_id = get_child_node_value (node, "userid");
-  priv->display_name = get_child_node_value (node, "displayname");
-  priv->profile_url = get_child_node_value (node, "weburi");
   priv->image_url = get_child_node_value (node, "imageuri");
 
   rest_xml_node_unref (node);
@@ -253,8 +278,6 @@ online_notify (gboolean online, gpointer user_data)
   SwServiceMySpacePrivate *priv = service->priv;
 
   if (online) {
-    const char *key = NULL, *secret = NULL;
-    sw_keystore_get_key_secret ("myspace", &key, &secret);
     sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, service);
   } else {
     g_free (priv->user_id);
@@ -268,17 +291,17 @@ online_notify (gboolean online, gpointer user_data)
   }
 }
 
-static
-void credentials_updated (SwService *service)
+static void
+refresh_credentials (SwServiceMySpace *myspace)
 {
-  /* FIXME REWRITE THIS FUNCTION!!! */
-  /* If we're online, force a reconnect to fetch new credentials */
-  if (sw_is_online ()) {
-    online_notify (FALSE, service);
-    online_notify (TRUE, service);
+  SwServiceMySpacePrivate *priv = myspace->priv;
+  sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, myspace);
+}
 
-    sw_service_emit_user_changed (service);
-  }
+static void
+credentials_updated (SwService *service)
+{
+  refresh_credentials (SW_SERVICE_MYSPACE (service));
 }
 
 static void
@@ -292,6 +315,9 @@ sw_service_myspace_dispose (GObject *object)
     g_object_unref (priv->proxy);
     priv->proxy = NULL;
   }
+
+  g_free (priv->user_id);
+  g_free (priv->image_url);
 
   G_OBJECT_CLASS (sw_service_myspace_parent_class)->dispose (object);
 }
