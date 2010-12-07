@@ -188,6 +188,26 @@ log_out_clicked (GtkButton *button, gpointer user_data)
                                  NULL);
 }
 
+static char *
+encode_tokens (const char *token, const char *secret)
+{
+  char *encoded_token, *encoded_secret;
+  char *string;
+
+  g_assert (token);
+  g_assert (secret);
+
+  encoded_token = g_base64_encode ((guchar*)token, strlen (token));
+  encoded_secret = g_base64_encode ((guchar*)secret, strlen (secret));
+
+  string = g_strconcat (encoded_token, " ", encoded_secret, NULL);
+
+  g_free (encoded_token);
+  g_free (encoded_secret);
+
+  return string;
+}
+
 static void
 access_token_cb (OAuthProxy   *proxy,
                  const GError *error,
@@ -207,7 +227,7 @@ access_token_cb (OAuthProxy   *proxy,
     return;
   }
 
-  encoded = bisho_utils_encode_tokens
+  encoded = encode_tokens
     (oauth_proxy_get_token (OAUTH_PROXY (priv->proxy)),
      oauth_proxy_get_token_secret (OAUTH_PROXY (priv->proxy)));
 
