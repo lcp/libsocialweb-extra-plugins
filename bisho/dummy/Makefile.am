@@ -1,5 +1,4 @@
-panedir = $(BISHO_MODULES_DIR)
-pane_LTLIBRARIES = libdummy.la
+noinst_LTLIBRARIES = libdummy.la
 
 libdummy_la_SOURCES = dummy.c dummy.h
 
