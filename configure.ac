@@ -55,6 +55,35 @@ SOCIALWEB_ENABLE_SERVICE(Sina, sina, SINA)
 SOCIALWEB_ENABLE_SERVICE(Digg, digg, DIGG)
 SOCIALWEB_ENABLE_SERVICE(Myspace, myspace, MYSPACE)
 
+PKG_CHECK_MODULES(BISHO_MODULE,
+                  bisho
+                  mx-gtk-1.0
+                  gnome-keyring-1
+                  libsocialweb-keystore
+                  rest-0.7
+                  libsoup-gnome-2.4
+                  json-glib-1.0
+                  gconf-2.0 >= 1.2.0
+                  webkit-1.0)
+
+AC_MSG_CHECKING([Bisho modules dir])
+AC_ARG_WITH([bisho-modules-dir],
+            [AC_HELP_STRING([--with-bisho-modules-dir],
+                            [directory to install bisho modules])],
+                            [], [with_bisho_modules_dir=""])
+if test -z "$with_bisho_modules_dir"; then
+  BISHO_MODULES_DIR=`$PKG_CONFIG --variable=modulesdir bisho`
+else
+  BISHO_MODULES_DIR="$with_bisho_modules_dir"
+fi
+
+if test "x$BISHO_MODULES_DIR" = "x"; then
+    AC_MSG_ERROR([could not determine modulesdir])
+else
+    AC_MSG_RESULT([$BISHO_MODULES_DIR])
+fi
+AC_SUBST(BISHO_MODULES_DIR)
+
 servicesdir=`pkg-config --variable=servicesdir libsocialweb-module`
 AC_SUBST(servicesdir)
 
@@ -67,6 +96,9 @@ AC_OUTPUT([
         build-aux/shave:m4/shave.in
         build-aux/shave-libtool:m4/shave-libtool.in
         Makefile
+	bisho/Makefile
+	bisho/dummy/Makefile
+	bisho/sina/Makefile
         services/Makefile
         services/dummy/Makefile
         services/youtube/Makefile
