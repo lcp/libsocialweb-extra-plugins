@@ -20,7 +20,7 @@
 #ifndef __BISHO_PANE_DUMMY_H__
 #define __BISHO_PANE_DUMMY_H__
 
-#include "bisho-pane.h"
+#include <bisho/bisho-pane.h>
 
 G_BEGIN_DECLS
 

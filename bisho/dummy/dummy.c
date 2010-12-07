@@ -18,8 +18,9 @@
  */
 
 #include <config.h>
-#include "bisho-module.h"
-#include "bisho-utils.h"
+#include <glib-object.h>
+#include <bisho/service-info.h>
+#include "dummy.h"
 
 struct _BishoPaneDummyPrivate {
   gpointer dummy;
@@ -37,17 +38,14 @@ bisho_pane_dummy_get_auth_type (BishoPaneClass *klass)
 static void
 bisho_pane_dummy_class_finalize (BishoPaneDummyClass *klass)
 {
-  G_OBJECT_CLASS (bisho_pane_dummy_parent_class)->finalize (object);
 }
 
 static void
 bisho_pane_dummy_class_init (BishoPaneDummyClass *klass)
 {
-  GObjectClass *o_class = G_OBJECT_CLASS (klass);
   BishoPaneClass *pane_class = BISHO_PANE_CLASS (klass);
 
   pane_class->get_auth_type = bisho_pane_dummy_get_auth_type;
-  pane_class->finalize = bisho_pane_dummy_class_finalize;
 
   g_type_class_add_private (klass, sizeof (BishoPaneDummyPrivate));
 }
@@ -58,7 +56,7 @@ bisho_pane_dummy_init (BishoPaneDummy *pane)
 }
 
 void
-bisho_module_load (BishoModule *module)
+bisho_module_load (GTypeModule *module)
 {
-  bisho_pane_dummy_register_type ((GTypeModule *)module);
+  bisho_pane_dummy_register_type (module);
 }
