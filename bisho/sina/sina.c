@@ -26,9 +26,7 @@
 #include <rest/oauth-proxy.h>
 #include <rest/oauth-proxy-call.h>
 #include <libsocialweb-keystore/sw-keystore.h>
-#include "service-info.h"
-#include "bisho-module.h"
-#include "bisho-utils.h"
+#include <bisho/service-info.h>
 #include "sina.h"
 
 /* TODO: use sw-keyring */
@@ -461,7 +459,7 @@ bisho_pane_sina_init (BishoPaneSina *pane)
 }
 
 void
-bisho_module_load (BishoModule *module)
+bisho_module_load (GTypeModule *module)
 {
-  bisho_pane_sina_register_type ((GTypeModule *)module);
+  bisho_pane_sina_register_type (module);
 }
