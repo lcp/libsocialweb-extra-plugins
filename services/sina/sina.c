@@ -227,8 +227,7 @@ got_user_cb (RestProxyCall *call,
 
   rest_xml_node_unref (root);
 
-  sw_service_emit_capabilities_changed
-    (service, get_dynamic_caps (service));
+  sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
 }
 
 static void
@@ -276,6 +275,9 @@ static void
 credentials_updated (SwService *service)
 {
   refresh_credentials (SW_SERVICE_SINA (service));
+
+  sw_service_emit_user_changed (service);
+  sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
 }
 
 static const char *
