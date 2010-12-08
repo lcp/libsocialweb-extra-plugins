@@ -250,6 +250,7 @@ found_password_cb (GnomeKeyringResult  result,
     }
   }
 
+  sw_service_emit_user_changed (service);
   sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
 }
 
