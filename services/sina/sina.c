@@ -267,8 +267,8 @@ online_notify (gboolean online, gpointer user_data)
 static void
 refresh_credentials (SwServiceSina *sina)
 {
-  SwServiceSinaPrivate *priv = sina->priv;
-  sw_keyfob_oauth ((OAuthProxy *)priv->proxy, got_tokens_cb, sina);
+  online_notify (FALSE, (SwService *)sina);
+  online_notify (TRUE, (SwService *)sina);
 }
 
 static void
