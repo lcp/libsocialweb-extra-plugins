@@ -372,6 +372,10 @@ sw_service_youtube_initable (GInitable    *initable,
   
   sw_online_add_notify (online_notify, youtube);
 
+  refresh_credentials (youtube);
+
+  priv->inited = TRUE;
+
   return TRUE;
 }
 
