@@ -580,6 +580,22 @@ sw_youtube_item_view_class_init (SwYoutubeItemViewClass *klass)
                               G_TYPE_HASH_TABLE,
                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   g_object_class_install_property (object_class, PROP_PARAMS, pspec);
+
+
+  pspec = g_param_spec_string ("developer_key",
+                               "developer_key",
+                               "developer_key",
+                               NULL,
+                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_DEVKEY, pspec);
+
+
+  pspec = g_param_spec_string ("user_auth",
+                               "user_auth",
+                               "user_auth",
+                               NULL,
+                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_USERAUTH, pspec);
 }
 
 static void
