@@ -362,8 +362,6 @@ _got_videos_cb (RestProxyCall *call,
   if (!node)
     return;
 
-  node = rest_xml_node_find (node, "item");
-
   /* Clean up the thumbnail mapping cache */
   g_hash_table_remove_all (priv->thumb_map);
 
