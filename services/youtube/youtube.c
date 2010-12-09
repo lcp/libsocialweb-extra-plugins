@@ -129,6 +129,17 @@ get_dynamic_caps (SwService *service)
   return no_caps;
 }
 
+const char *
+sw_service_youtube_get_user_auth (SwServiceYoutube *youtube)
+{
+  SwServiceYoutubePrivate *priv = GET_PRIVATE (youtube);
+
+  if (priv->user_auth == NULL)
+    return NULL;
+
+  return g_strdup (priv->user_auth);
+}
+
 static void
 _got_user_auth (RestProxyCall *call,
                 const GError  *error,

@@ -395,8 +395,14 @@ static void
 _get_status_updates (SwYoutubeItemView *item_view)
 {
   SwYoutubeItemViewPrivate *priv = GET_PRIVATE (item_view);
+  SwService *service = sw_item_view_get_service ((SwItemView *)item_view);
   RestProxyCall *call;
   char *user_auth = NULL, *devkey = NULL;
+
+  g_free (priv->user_auth);
+  priv->user_auth = sw_service_youtube_get_user_auth (SW_SERVICE_YOUTUBE (service));
+  if (priv->user_auth == NULL)
+    return;
 
   sw_set_empty (priv->set);
 

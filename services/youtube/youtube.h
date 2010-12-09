@@ -56,6 +56,8 @@ typedef struct {
 
 GType sw_service_youtube_get_type (void);
 
+const char* sw_service_youtube_get_user_auth (SwServiceYoutube *youtube);
+
 G_END_DECLS
 
 #endif /* _SW_SERVICE_YOUTUBE */
