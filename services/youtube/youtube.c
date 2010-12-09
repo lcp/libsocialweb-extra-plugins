@@ -134,10 +134,7 @@ sw_service_youtube_get_user_auth (SwServiceYoutube *youtube)
 {
   SwServiceYoutubePrivate *priv = GET_PRIVATE (youtube);
 
-  if (priv->user_auth == NULL)
-    return NULL;
-
-  return g_strdup (priv->user_auth);
+  return priv->user_auth;
 }
 
 static void
@@ -432,7 +429,6 @@ _youtube_query_open_view (SwQueryIface          *self,
   item_view = g_object_new (SW_TYPE_YOUTUBE_ITEM_VIEW,
                             "proxy", priv->proxy,
                             "developer_key", priv->developer_key,
-                            "user_auth", priv->user_auth,
                             "service", self,
                             "query", query,
                             "params", params,

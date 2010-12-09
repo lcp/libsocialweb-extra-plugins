@@ -51,7 +51,6 @@ struct _SwYoutubeItemViewPrivate {
   gchar *query;
   RestProxy *proxy;
   gchar *developer_key;
-  gchar *user_auth;
 
   SwSet *set;
   GHashTable *thumb_map;
@@ -63,8 +62,7 @@ enum
   PROP_PROXY,
   PROP_PARAMS,
   PROP_QUERY,
-  PROP_DEVKEY,
-  PROP_USERAUTH
+  PROP_DEVKEY
 };
 
 #define UPDATE_TIMEOUT 5 * 60
@@ -99,9 +97,6 @@ sw_youtube_item_view_get_property (GObject    *object,
     case PROP_DEVKEY:
       g_value_set_string (value, priv->developer_key);
       break;
-    case PROP_USERAUTH:
-      g_value_set_string (value, priv->user_auth);
-      break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
   }
@@ -131,9 +126,6 @@ sw_youtube_item_view_set_property (GObject      *object,
       break;
     case PROP_DEVKEY:
       priv->developer_key = g_value_dup_string (value);
-      break;
-    case PROP_USERAUTH:
-      priv->user_auth = g_value_dup_string (value);
       break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -408,21 +400,21 @@ _get_status_updates (SwYoutubeItemView *item_view)
   SwYoutubeItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwService *service = sw_item_view_get_service ((SwItemView *)item_view);
   RestProxyCall *call;
-  char *user_auth = NULL, *devkey = NULL;
+  char *user_auth_header = NULL, *devkey_header = NULL;
+  const char *user_auth = NULL;
 
-  g_free (priv->user_auth);
-  priv->user_auth = sw_service_youtube_get_user_auth (SW_SERVICE_YOUTUBE (service));
-  if (priv->user_auth == NULL)
+  user_auth = sw_service_youtube_get_user_auth (SW_SERVICE_YOUTUBE (service));
+  if (user_auth == NULL)
     return;
 
   sw_set_empty (priv->set);
 
   call = rest_proxy_new_call (priv->proxy);
 
-  user_auth = g_strdup_printf ("GoogleLogin auth=%s", priv->user_auth);
-  rest_proxy_call_add_header (call, "Authorization", user_auth);
-  devkey = g_strdup_printf ("key=%s", priv->developer_key);
-  rest_proxy_call_add_header (call, "X-GData-Key", devkey);
+  user_auth_header = g_strdup_printf ("GoogleLogin auth=%s", user_auth);
+  rest_proxy_call_add_header (call, "Authorization", user_auth_header);
+  devkey_header = g_strdup_printf ("key=%s", priv->developer_key);
+  rest_proxy_call_add_header (call, "X-GData-Key", devkey_header);
 
   if (g_str_equal (priv->query, "feed"))
     rest_proxy_call_set_function (call, "users/default/newsubscriptionvideos");
@@ -441,8 +433,8 @@ _get_status_updates (SwYoutubeItemView *item_view)
                          (GObject *)item_view,
                          NULL,
                          NULL);
-  g_free (user_auth);
-  g_free (devkey);
+  g_free (user_auth_header);
+  g_free (devkey_header);
 }
 
 
@@ -618,14 +610,6 @@ sw_youtube_item_view_class_init (SwYoutubeItemViewClass *klass)
                                NULL,
                                G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   g_object_class_install_property (object_class, PROP_DEVKEY, pspec);
-
-
-  pspec = g_param_spec_string ("user_auth",
-                               "user_auth",
-                               "user_auth",
-                               NULL,
-                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
-  g_object_class_install_property (object_class, PROP_USERAUTH, pspec);
 }
 
 static void
