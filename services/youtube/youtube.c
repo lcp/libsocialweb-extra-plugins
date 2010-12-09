@@ -184,6 +184,8 @@ online_notify (gboolean online, gpointer user_data)
   SwServiceYoutube *youtube = (SwServiceYoutube *)user_data;
   SwServiceYoutubePrivate *priv = GET_PRIVATE (youtube);
 
+  priv->credentials = OFFLINE;
+
   if (online) {
     if (priv->username && priv->password) {
       RestProxyCall *call;
@@ -207,17 +209,8 @@ online_notify (gboolean online, gpointer user_data)
                              (GObject*)youtube,
                              NULL,
                              NULL);
-      priv->credentials = OFFLINE;
-    } else {
-      priv->credentials = OFFLINE;
     }
   } else {
-    g_free (priv->user_auth);
-    g_free (priv->nickname);
-
-    priv->user_auth = NULL;
-    priv->nickname = NULL;
-    priv->credentials = OFFLINE;
     sw_service_emit_capabilities_changed ((SwService *)youtube,
                                           get_dynamic_caps ((SwService *)youtube));
   }
