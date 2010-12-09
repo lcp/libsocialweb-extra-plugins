@@ -248,8 +248,6 @@ _got_login_data (RestProxyCall *call,
 
   plurk->priv->credentials = CREDS_VALID;
 
-  sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
-
   parser = json_parser_new ();
   root = node_from_call (call, parser);
   construct_user_data (plurk, root);
@@ -266,6 +264,8 @@ online_notify (gboolean online, gpointer user_data)
   SwServicePlurk *plurk = (SwServicePlurk *)user_data;
   SwServicePlurkPrivate *priv = GET_PRIVATE (plurk);
 
+  priv->credentials = OFFLINE;
+
   if (online) {
     if (priv->username && priv->password) {
       RestProxyCall *call;
@@ -278,16 +278,10 @@ online_notify (gboolean online, gpointer user_data)
                                   "password", priv->password,
                                   NULL);
       rest_proxy_call_async (call, _got_login_data, (GObject*)plurk, NULL, NULL);
-      /* Set offline for now and wait for access_token_cb to return */
-      priv->credentials = OFFLINE;
-    } else {
-      priv->credentials = OFFLINE;
     }
   } else {
     g_free (priv->user_id);
     priv->user_id = NULL;
-
-    priv->credentials = OFFLINE;
 
     sw_service_emit_capabilities_changed ((SwService *)plurk,
                                           get_dynamic_caps ((SwService *)plurk));
