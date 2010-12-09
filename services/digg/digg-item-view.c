@@ -457,9 +457,24 @@ _service_capabilities_changed_cb (SwService    *service,
                                   const gchar **caps,
                                   SwItemView   *item_view)
 {
+  SwDiggItemViewPrivate *priv = GET_PRIVATE ((SwDiggItemView*) item_view);
+
   if (sw_service_has_cap (caps, CREDENTIALS_VALID))
   {
     digg_item_view_refresh (item_view);
+
+    if (!priv->timeout_id)
+    {
+      priv->timeout_id = g_timeout_add_seconds (UPDATE_TIMEOUT,
+                                                (GSourceFunc)_update_timeout_cb,
+                                                item_view);
+    }
+  } else {
+    if (priv->timeout_id)
+    {
+      g_source_remove (priv->timeout_id);
+      priv->timeout_id = 0;
+    }
   }
 }
 

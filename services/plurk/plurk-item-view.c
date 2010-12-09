@@ -505,9 +505,24 @@ _service_capabilities_changed_cb (SwService    *service,
                                   const gchar **caps,
                                   SwItemView   *item_view)
 {
+  SwPlurkItemViewPrivate *priv = GET_PRIVATE ((SwPlurkItemView*) item_view);
+
   if (sw_service_has_cap (caps, CREDENTIALS_VALID))
   {
     plurk_item_view_refresh (item_view);
+
+    if (!priv->timeout_id)
+    {
+      priv->timeout_id = g_timeout_add_seconds (UPDATE_TIMEOUT,
+                                                (GSourceFunc)_update_timeout_cb,
+                                                item_view);
+    }
+  } else {
+    if (priv->timeout_id)
+    {
+      g_source_remove (priv->timeout_id);
+      priv->timeout_id = 0;
+    }
   }
 }
 
