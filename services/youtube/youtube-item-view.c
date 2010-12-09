@@ -543,7 +543,7 @@ _service_capabilities_changed_cb (SwService    *service,
 {
   if (sw_service_has_cap (caps, CREDENTIALS_VALID))
   {
-    flickr_item_view_refresh (item_view);
+    youtube_item_view_refresh (item_view);
   }
 }
 
