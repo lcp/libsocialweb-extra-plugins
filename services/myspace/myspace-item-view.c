@@ -25,7 +25,7 @@
 #include <pango/pango.h>
 
 #include <rest/rest-proxy.h>
-#include <rest/rest-xml-parser.h>
+#include <json-glib/json-glib.h>
 #include <libsoup/soup.h>
 
 #include <libsocialweb/sw-utils.h>
@@ -48,8 +48,6 @@ typedef struct _SwMySpaceItemViewPrivate SwMySpaceItemViewPrivate;
 struct _SwMySpaceItemViewPrivate {
   RestProxy *proxy;
   guint timeout_id;
-  /* TODO remove user_id */
-  gchar *user_id;
   GHashTable *params;
   gchar *query;
 };
@@ -58,9 +56,6 @@ enum
 {
   PROP_0,
   PROP_PROXY,
-  PROP_USERID,
-  PROP_DISPLAYNAME,
-  PROP_PROFILEURL,
   PROP_PARAMS,
   PROP_QUERY
 };
@@ -88,9 +83,6 @@ sw_myspace_item_view_get_property (GObject    *object,
     case PROP_PROXY:
       g_value_set_object (value, priv->proxy);
       break;
-    case PROP_USERID:
-      g_value_set_string (value, priv->user_id);
-      break;
     case PROP_PARAMS:
       g_value_set_boxed (value, priv->params);
       break;
@@ -117,9 +109,6 @@ sw_myspace_item_view_set_property (GObject      *object,
         g_object_unref (priv->proxy);
       }
       priv->proxy = g_value_dup_object (value);
-      break;
-    case PROP_USERID:
-      priv->user_id = g_value_dup_string (value);
       break;
     case PROP_PARAMS:
       priv->params = g_value_dup_boxed (value);
@@ -173,17 +162,15 @@ sw_myspace_item_view_finalize (GObject *object)
   G_OBJECT_CLASS (sw_myspace_item_view_parent_class)->finalize (object);
 }
 
-static RestXmlNode *
-node_from_call (RestProxyCall *call)
+static JsonNode *
+node_from_call (RestProxyCall *call, JsonParser *parser)
 {
-  static RestXmlParser *parser = NULL;
-  RestXmlNode *root;
+  JsonNode *root;
+  GError *error;
+  gboolean ret = FALSE;
 
   if (call == NULL)
     return NULL;
-
-  if (parser == NULL)
-    parser = rest_xml_parser_new ();
 
   if (!SOUP_STATUS_IS_SUCCESSFUL (rest_proxy_call_get_status_code (call))) {
     g_message ("Error from MySpace: %s (%d)",
@@ -192,130 +179,157 @@ node_from_call (RestProxyCall *call)
     return NULL;
   }
 
-  root = rest_xml_parser_parse_from_data (parser,
-                                          rest_proxy_call_get_payload (call),
-                                          rest_proxy_call_get_payload_length (call));
+  ret = json_parser_load_from_data (parser,
+                                    rest_proxy_call_get_payload (call),
+                                    rest_proxy_call_get_payload_length (call),
+                                    &error);
+  root = json_parser_get_root (parser);
 
   if (root == NULL) {
-    g_message ("Invalid XML from MySpace: %s",
+    g_message ("Error from MySpace: %s",
                rest_proxy_call_get_payload (call));
     return NULL;
   }
 
-  if (strcmp (root->name, "error") != 0) {
-    return root;
-  } else {
-    RestXmlNode *node;
-    node = rest_xml_node_find (root, "statusdescription");
-    if (node) {
-      g_message ("Error: %s", node->content);
-    } else {
-      g_message ("Error from MySpace: %s",
-                 rest_proxy_call_get_payload (call));
-    }
-    rest_xml_node_unref (root);
-    return NULL;
-  }
+  return root;
 }
 
-static void
-_populate_set_from_node (SwService   *service,
-                         SwSet       *set,
-                         RestXmlNode *root)
+static char *
+make_date (const char *s)
 {
-  RestXmlNode *node;
+  struct tm tm;
 
-  if (!root)
-    return;
+  /* Time format example: 2010-12-07T10:02:22Z */
+  strptime (s, "%FT%T%z", &tm);
+  return sw_time_t_to_string (timegm (&tm));
+}
+
+static SwItem *
+make_item (SwService *service, JsonNode *entry)
+{
+  SwItem *item;
+  JsonNode *author;
+  JsonObject *entry_obj, *author_obj;
+  const char *tmp;
+  char *status;
+
+  item = sw_item_new ();
+  sw_item_set_service (item, service);
+
+  entry_obj = json_node_get_object (entry);
+  author = json_object_get_member (entry_obj, "author");
+  author_obj = json_node_get_object (author);
 
   /*
-   * The result of /status is a <user> node, whereas /friends/status is
-   * <user><friends><user>. Look closely to find out what data we have
-   */
-  node = rest_xml_node_find (root, "friends");
-  if (node) {
-    node = rest_xml_node_find (node, "user");
-  } else {
-    node = root;
-  }
+    id: myspace-<statusId>
+    authorid: <userId>
+    author: <displayName>
+    authoricon: <thumbnailUrl> 
+    content: <status>
+    date: <moodStatusLastUpdated>
+    url: <profileUrl>
+  */
 
-  while (node) {
-    /*
-      <user>
-      <userid>188488921</userid>
-      <imageurl>http://c3.ac-images.myspacecdn.com/images02/110/s_768909a648e740939422bdc875ff2bf2.jpg</imageurl>
-      <profileurl>http://www.myspace.com/cwiiis</profileurl>
-      <name>Cwiiis</name>
-      <mood>neutral</mood>
-      <moodimageurl>http://x.myspacecdn.com/images/blog/moods/iBrads/amused.gif</moodimageurl>
-      <moodlastupdated>15/04/2009 04:20:59</moodlastupdated>
-      <status>haha, Ross has myspace</status>
-      </user>
-    */
+  /* Construct the id of sw_item */
+  tmp = json_object_get_string_member (entry_obj, "statusId");
+  sw_item_take (item, "id", g_strconcat ("myspace-", tmp, NULL));
+
+  /* Get the user id for authorid */
+  tmp = json_object_get_string_member (entry_obj, "userId");
+  sw_item_put (item, "authorid", tmp);
+
+  /* Get the user name */
+  tmp = json_object_get_string_member (author_obj, "displayName");
+  sw_item_put (item, "author", tmp);
+
+  /* Get the url of avatar */
+  tmp = json_object_get_string_member (author_obj, "thumbnailUrl");
+  sw_item_request_image_fetch (item, FALSE, "authoricon", g_strdup (tmp));;
+
+  /* Get the content */
+  pango_parse_markup (json_object_get_string_member (entry_obj, "status"),
+                      -1, 0, NULL, &status, NULL, NULL);
+  sw_item_put (item, "content", status);
+  /* TODO: if mood is not "(none)" then append that to the status message */
+
+  /* Get the date */
+  tmp = json_object_get_string_member (entry_obj, "moodStatusLastUpdated");
+  sw_item_take (item, "date", make_date (tmp));
+
+  /* Get the url of this status */
+  /* TODO find out the true url instead of the profile url */
+  tmp = json_object_get_string_member (author_obj, "profileUrl");
+  sw_item_put (item, "url", tmp);
+
+  return item;
+}
+
+static void
+_populate_set_from_node (SwService *service,
+                         SwSet     *set,
+                         JsonNode  *root)
+{
+  JsonNode *entries;
+  JsonArray *status_array;
+  JsonObject *object;
+  guint i, length;
+
+  /*
+  The data format:
+  "entry":[
+    {
+      "author":{
+        "displayName":"username",
+        "id":"myspace.com.person.<id>",
+        "msUserType":"RegularUser",
+        "name":{
+          "familyName":"family name",
+          "givenName":"given name"
+        },
+        "profileUrl":"http://www.myspace.com/<id>",
+        "thumbnailUrl":"url of avatar"
+      },
+      "moodName":"none",
+      "moodStatusLastUpdated":"2010-12-07T10:02:22Z",
+      "numComments":"0",
+      "status":"whatever you said",
+      "statusId":"<status id>",
+      "userId":"myspace.com.person.<id>"
+    },
+    ...
+  ],
+  */
+  object = json_node_get_object (root);
+  entries = json_object_get_member (object, "entry");
+
+  status_array = json_node_get_array (entries);
+  length = json_array_get_length (status_array);
+
+  for (i=0; i<length; i++) {
+    JsonNode *entry = json_array_get_element (status_array, i);
     SwItem *item;
-    char *id, *status;
-    RestXmlNode *subnode;
-    gint64 date;
 
-    item = sw_item_new ();
-    sw_item_set_service (item, service);
-
-    id = g_strconcat ("myspace-",
-                      rest_xml_node_find (node, "userid")->content,
-                      "-",
-                      rest_xml_node_find (node, "moodlastupdated")->content,
-                      NULL);
-    sw_item_take (item, "id", id);
-
-    date = atoi (rest_xml_node_find (node, "moodlastupdated")->content);
-    /* Time correction. This is bad... */
-    date += (15*60*60);
-    sw_item_take (item, "date", sw_time_t_to_string (date));
-
-    sw_item_put (item, "authorid", rest_xml_node_find (node, "userid")->content);
-    subnode = rest_xml_node_find (node, "name");
-    if (subnode && subnode->content)
-      sw_item_put (item, "author", subnode->content);
-
-    subnode = rest_xml_node_find (node, "imageurl");
-    if (subnode && subnode->content)
-      sw_item_request_image_fetch (item, FALSE, "authoricon", subnode->content);
-
-    pango_parse_markup (rest_xml_node_find (node, "status")->content,
-                        -1,
-                        0,
-                        NULL,
-                        &status,
-                        NULL,
-                        NULL);
-    sw_item_put (item, "content", status);
-    /* TODO: if mood is not "(none)" then append that to the status message */
-
-    subnode = rest_xml_node_find (node, "profileurl");
-    if (subnode && subnode->content)
-      sw_item_put (item, "url", subnode->content);
+    item = make_item (service, entry);
 
     if (!sw_service_is_uid_banned (service, sw_item_get (item, "id"))) {
-      sw_set_add (set, G_OBJECT (item));
+      sw_set_add (set, (GObject *)item);
     }
-    g_object_unref (item);
 
-    node = node->next;
+    g_object_unref (item);
   }
 }
 
-static void _get_user_status_updates (SwMySpaceItemView *item_view, SwSet *set);
-
 static void
-_got_user_status_cb (RestProxyCall *call,
-                     const GError  *error,
-                     GObject       *weak_object,
-                     gpointer       userdata)
+_got_status_cb (RestProxyCall *call,
+                const GError  *error,
+                GObject       *weak_object,
+                gpointer       userdata)
 {
   SwMySpaceItemView *item_view = SW_MYSPACE_ITEM_VIEW (weak_object);
   SwMySpaceItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwSet *set = (SwSet *)userdata;
-  RestXmlNode *root;
+  JsonParser *parser = NULL;
+  JsonNode *root;
   SwService *service;
 
   if (error) {
@@ -325,9 +339,12 @@ _got_user_status_cb (RestProxyCall *call,
 
   service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
-  root = node_from_call (call);
+  parser = json_parser_new ();
+  root = node_from_call (call, parser);
+  if (root == NULL)
+    return;
+
   _populate_set_from_node (service, set, root);
-  rest_xml_node_unref (root);
 
   g_object_unref (call);
 
@@ -340,33 +357,9 @@ _got_user_status_cb (RestProxyCall *call,
                  set);
 
   sw_set_unref (set);
-}
 
-static void
-_got_friends_status_cb (RestProxyCall *call,
-                        const GError  *error,
-                        GObject       *weak_object,
-                        gpointer       userdata)
-{
-  SwMySpaceItemView *item_view = SW_MYSPACE_ITEM_VIEW (weak_object);
-  SwSet *set = (SwSet *)userdata;
-  RestXmlNode *root;
-  SwService *service;
-
-  if (error) {
-    g_message ("Error: %s", error->message);
-    return;
-  }
-
-  service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
-
-  root = node_from_call (call);
-  _populate_set_from_node (service, set, root);
-  rest_xml_node_unref (root);
-
-  g_object_unref (call);
-
-  _get_user_status_updates (item_view, set);
+  g_object_unref (parser);
+  g_object_unref (root);
 }
 
 static void
@@ -375,19 +368,16 @@ _get_user_status_updates (SwMySpaceItemView *item_view,
 {
   SwMySpaceItemViewPrivate *priv = GET_PRIVATE (item_view);
   RestProxyCall *call;
-  char *function;
 
   call = rest_proxy_new_call (priv->proxy);
 
+  rest_proxy_call_set_function (call, "1.0/statusmood/@me/@self/history");
   rest_proxy_call_add_params(call,
-                             "dateFormat", "utc",
-                             "timeZone", "0",
+                             "count", "20",
+                             "fields", "author",
                              NULL);
-  function = g_strdup_printf ("v1/users/%s/status", priv->user_id);
-  rest_proxy_call_set_function (call, function);
-  g_free (function);
 
-  rest_proxy_call_async (call, _got_user_status_cb, (GObject*)item_view, set, NULL);
+  rest_proxy_call_async (call, _got_status_cb, (GObject*)item_view, set, NULL);
 }
 
 static void
@@ -396,19 +386,17 @@ _get_friends_status_updates (SwMySpaceItemView *item_view,
 {
   SwMySpaceItemViewPrivate *priv = GET_PRIVATE (item_view);
   RestProxyCall *call;
-  char *function;
 
   call = rest_proxy_new_call (priv->proxy);
 
+  rest_proxy_call_set_function (call, "1.0/statusmood/@me/@friends/history");
   rest_proxy_call_add_params(call,
-                             "dateFormat", "utc",
-                             "timeZone", "0",
+                             "includeself", "true",
+                             "count", "20",
+                             "fields", "author",
                              NULL);
-  function = g_strdup_printf ("v1/users/%s/friends/status", priv->user_id);
-  rest_proxy_call_set_function (call, function);
-  g_free (function);
 
-  rest_proxy_call_async (call, _got_friends_status_cb, (GObject*)item_view, set, NULL);
+  rest_proxy_call_async (call, _got_status_cb, (GObject*)item_view, set, NULL);
 }
 
 static void
@@ -417,8 +405,6 @@ _get_status_updates (SwMySpaceItemView *item_view)
   SwMySpaceItemViewPrivate *priv = GET_PRIVATE (item_view);
   GHashTable *params = NULL;
   SwSet *set;
-
-  g_assert (priv->user_id);
 
   set = sw_item_set_new ();
 
@@ -598,13 +584,6 @@ sw_myspace_item_view_class_init (SwMySpaceItemViewClass *klass)
                                G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
   g_object_class_install_property (object_class, PROP_PROXY, pspec);
 
-  pspec = g_param_spec_string ("user_id",
-                               "user_id",
-                               "user_id",
-                               NULL,
-                               G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
-  g_object_class_install_property (object_class, PROP_USERID, pspec);
-
   pspec = g_param_spec_string ("query",
                                "query",
                                "query",
@@ -623,8 +602,4 @@ sw_myspace_item_view_class_init (SwMySpaceItemViewClass *klass)
 static void
 sw_myspace_item_view_init (SwMySpaceItemView *self)
 {
-  SwMySpaceItemViewPrivate *priv = GET_PRIVATE (self);
-
-  /* Initialize private variables */
-  priv->user_id = NULL;
 }
