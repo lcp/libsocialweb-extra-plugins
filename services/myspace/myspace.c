@@ -499,22 +499,18 @@ _myspace_status_update_update_status (SwStatusUpdateIface   *self,
   SwServiceMySpace *myspace = (SwServiceMySpace *)self;
   SwServiceMySpacePrivate *priv = myspace->priv;
   RestProxyCall *call;
-  gchar *function;
+  gchar *request_body;
 
   if (!priv->user_id)
     return;
 
   call = rest_proxy_new_call (priv->proxy);
-  /* TODO use OpenSocial 1.0 API*/
   rest_proxy_call_set_method (call, "PUT");
-  function = g_strdup_printf ("v1/users/%s/status", priv->user_id);
-  rest_proxy_call_set_function (call, function);
-  g_free (function);
+  rest_proxy_call_set_function (call, "1.0/statusmood/@me/@self");
 
-  rest_proxy_call_add_params (call,
-                              "userId", priv->user_id,
-                              "status", msg,
-                              NULL);
+  request_body = g_strdup_printf ("{ \"status\":\"%s\" }", msg);
+  rest_proxy_call_set_body (call, request_body);
+
   rest_proxy_call_async (call, _update_status_cb, (GObject *)self, NULL, NULL);
   sw_status_update_iface_return_from_update_status (context);
 }
