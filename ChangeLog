@@ -1,0 +1,68 @@
+Version 0.1.0
+- Resize Digg banner
+- Dummy Remove deprecated refresh()
+- Update dep check
+- Plurk: Update plurk.c for lsw >= 0.25.5
+- Plurk: Add AuthPasswordServer to plurk.keys.in
+- Plurk: Add copyright headers
+- Plurk: Update plurk-item-view.c for lsw >= 0.25.5
+- Plurk: Fix cflags and ldflags
+- Plurk: Remove unused code
+- Youtube: Add item view object
+- Youtube: Add copyright headers
+- Youtube: update youtube for lsw >= 0.25.5
+- Youtube: remove sw-call-list
+- Youtube: Add function: make_item()
+- Sina_t: Update sina for lsw >= 0.25.5
+- MySpace: Add myspace-item-view.* for initial development
+- MySpace: Update copyright headers
+- Plurk: plurk-item-view.c: install property api_key
+- Add Makefiles of MySpace and Digg to configure.ac
+- MySpace: Update myspace for lsw >= 0.25.5
+- Digg: Update digg for lsw >= 0.25.5
+- MySpace: Rewrite credentials_updated()
+- Sina_t: Rewrite refresh_credentials()
+- MySpace: Amend account_is_configured()
+- MySpace: Declare account_is_configured() as static
+- Sina_t: Replace sw_keyfob_oauth_check_credential() with account_is_configured()
+- MySpace: Remove unused variables
+- Add a dummy bisho pane
+- Sina_t: Branch bisho oauth pane for sina's buggy Oauth 1.0a
+- Sina_t: Define LIBEXECDIR in bisho/sina/Makefile.am
+- Include bisho panes in Makfile.am and configure.ac
+- Sina_t: steal encode_tokens() from bisho
+- Don't install dummy bisho pane
+- Youtube: Install item view properties
+- Youtube: Refresh credentials when init completes
+- Youtube: Fix video retrieve callback
+- Plurk: Emit user_changed when the credentials are updated
+- Youtube: Emit user_changed when the credentials are updated
+- Sina_t: Emit user_changed when the credentials are updated
+- Sina_t: Refresh credentials properly
+- Youtube: Update user_auth before getting video list
+- Youtube: Don't clean up account when offline
+- Youtube: React to capabilities_changed
+- Youtube: Check user_auth directly instead of storing it
+- Plurk: Clean up code
+- {digg,myspace,plurk,sina,youtube}-item-view: Remove status update timeout when the credentials are invalid
+- MySpace: Adopt OpenSocial 1.0 API
+- MySpace: Update status by OpenSocial 1.0 API
+- Add auth-browser to utils
+- Include utils into configure.ac and Makfile.am
+- bisho/sina: Use encode_tokens in utils
+- Clean up auth-browser.[ch]
+- bisho/myspace: Branch oauth pane from bisho for myspace
+- Change the callback format of auth-browser
+- bisho/myspace/myspace.h: Object renaming
+- bisho/myspace: Use auth-browser for authentication
+- Add myspace into Makefile list
+- MySpace: Use myspace pane instead of generic oauth pane
+- Check the prefix of loaded uri in auth-browser
+- Add new bisho pane: oauth-webkit
+- myspace,digg: use the oauth-webkit bisho pane
+- Include oauth-webkit into Makefile.am and configure.ac
+- Digg: correct the base url
+- oauth-webkit: Parse the url returned from the service provider
+- Digg: Remove account verification bits
+- Digg: Clean up status retrieving bits
+- Build oauth-webkit by default
