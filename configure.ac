@@ -66,7 +66,7 @@ PKG_CHECK_MODULES(BISHO_MODULE,
                   gconf-2.0 >= 1.2.0)
 
 PKG_CHECK_MODULES(UTIL, 
-                  webkit-1.0,
+                  webkit-1.0
                   gtk+-2.0)
 
 AC_MSG_CHECKING([Bisho modules dir])
@@ -103,6 +103,7 @@ AC_OUTPUT([
 	bisho/Makefile
 	bisho/dummy/Makefile
 	bisho/sina/Makefile
+	bisho/myspace/Makefile
         services/Makefile
         services/dummy/Makefile
         services/youtube/Makefile

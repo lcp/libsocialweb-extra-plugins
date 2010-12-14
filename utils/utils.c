@@ -17,6 +17,9 @@
  * this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <glib.h>
+#include <string.h>
+
 char *
 encode_tokens (const char *token, const char *secret)
 {
