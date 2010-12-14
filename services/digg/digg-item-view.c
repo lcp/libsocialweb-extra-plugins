@@ -219,6 +219,10 @@ make_item (SwService *service, JsonNode *entry)
   str = json_object_get_string_member (story, "permalink");
   sw_item_put (item, "url", str);
 
+  /* content */
+  str = json_object_get_string_member (story, "description");
+  sw_item_put (item, "content", str);
+
   /* title */
   str = json_object_get_string_member (story, "title");
   sw_item_put (item, "title", str);
@@ -239,7 +243,7 @@ make_item (SwService *service, JsonNode *entry)
 
   /* the thumbnail */
   str = json_object_get_string_member (thumbnails, "large");
-  sw_item_request_image_fetch (item, TRUE, "thumbnail", str);
+  sw_item_request_image_fetch (item, TRUE, "authoricon", str);
 
   return item;
 }
@@ -273,24 +277,53 @@ _got_diggs_cb (RestProxyCall *call,
 
   /*
   stories : [
-    "permalink": "http://digg.com/news/world_news/Pakistan_s_Cricketers_Donate_Bonuses_To_Floods_Relief",
-    "title": "Pakistan's Cricketers Donate Bonuses To Floods Relief",
-    "url": "http://www.bbc.co.uk/news/world-south-asia-11080123",
-    "story_id": "20100825095640:23429676",
-    "diggs": 121,
-    "submiter": {
-      "username": "username",
-      "user_id": "12345",
-      "name": "Display Name",
-      "icon": null
-    }
-    "date_created": 1282730200,
-    "thumbnails": {
-      "large": "http://cdn2.diggstatic.com/story/Pakistan_s_Cricketers_Donate_Bonuses_To_Floods_Relief/l.png",
-      "small": "http://cdn1.diggstatic.com/story/Pakistan_s_Cricketers_Donate_Bonuses_To_Floods_Relief/s.png",
-      "medium": "http://cdn3.diggstatic.com/story/Pakistan_s_Cricketers_Donate_Bonuses_To_Floods_Relief/m.png",
-      "thumb": "http://cdn2.diggstatic.com/story/Pakistan_s_Cricketers_Donate_Bonuses_To_Floods_Relief/t.png"
-    }
+    {
+         "status": "top",
+         "permalink": "http://digg.com/news/science/stem_cell_transplant_has_cured_hiv_infection_in_berlin_patient_say_doctors",
+         "description": "Doctors who carried out a stem cell transplant on an HIV-infected man with leukaemia in 2007 say they now believe the man to have been cured of HIV infection as a result of the treatment, which introduced stem cells which happened to be resistant to HIV infection.",
+         "title": "Stem cell transplant has CURED HIV infection in 'Berlin patient', say doctors",
+         "url": "http://www.aidsmap.com/page/1577949",
+         "story_id": "20101214042548:ff70d165-3b3e-43ab-99e7-b92652c43701",
+         "diggs": 52,
+         "submiter": {
+             "username": "ether3al",
+             "about": "",
+             "user_id": "183849",
+             "name": "",
+             "icons": [
+                 "http://cdn2.diggstatic.com/user/183849/c.3598446662.png",
+                 "http://cdn3.diggstatic.com/user/183849/h.3598446662.png",
+                 "http://cdn3.diggstatic.com/user/183849/m.3598446662.png",
+                 "http://cdn1.diggstatic.com/user/183849/l.3598446662.png",
+                 "http://cdn3.diggstatic.com/user/183849/p.3598446662.png",
+                 "http://cdn2.diggstatic.com/user/183849/s.3598446662.png",
+                 "http://cdn2.diggstatic.com/user/183849/r.3598446662.png"
+             ],
+             "gender": "",
+             "diggs": 2931,
+             "comments": 61,
+             "followers": 103,
+             "location": "",
+             "following": 58,
+             "submissions": 422,
+             "icon": "http://cdn1.diggstatic.com/user/183849/p.3598446662.png"
+         },
+         "comments": 11,
+         "dugg": 0,
+         "topic": {
+             "clean_name": "science",
+             "name": "Science"
+         },
+         "promote_date": 1292318973,
+         "activity": [],
+        "date_created": 1292300748,
+        "thumbnails": {
+            "large": "http://cdn3.diggstatic.com/story/stem_cell_transplant_has_cured_hiv_infection_in_berlin_patient_say_doctors/l.png",
+            "small": "http://cdn3.diggstatic.com/story/stem_cell_transplant_has_cured_hiv_infection_in_berlin_patient_say_doctors/s.png",
+            "medium": "http://cdn1.diggstatic.com/story/stem_cell_transplant_has_cured_hiv_infection_in_berlin_patient_say_doctors/m.png",
+            "thumb": "http://cdn3.diggstatic.com/story/stem_cell_transplant_has_cured_hiv_infection_in_berlin_patient_say_doctors/t.png"
+        }
+    },
   ]
   */
 
