@@ -5,9 +5,5 @@ SUBDIRS += sina
 endif
 
 if WITH_MYSPACE
-SUBDIRS += myspace
+SUBDIRS += oauth-webkit
 endif
-
-#if WITH_DIGG
-#SUBDIRS += digg
-#endif

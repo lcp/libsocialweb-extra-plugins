@@ -103,7 +103,7 @@ AC_OUTPUT([
 	bisho/Makefile
 	bisho/dummy/Makefile
 	bisho/sina/Makefile
-	bisho/myspace/Makefile
+	bisho/oauth-webkit/Makefile
         services/Makefile
         services/dummy/Makefile
         services/youtube/Makefile
