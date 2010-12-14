@@ -315,7 +315,16 @@ continue_clicked (GtkWidget *button, gpointer user_data)
 static void
 got_auth_cb (gpointer data, const char *url)
 {
-  bisho_pane_oauth_webkit_continue_auth (BISHO_PANE (data), NULL);
+  GHashTable *params;
+  char **split_str;
+
+  split_str = g_strsplit (url, "?", 2);
+  if (split_str[1]) {
+    params = soup_form_decode (split_str[1]);
+    bisho_pane_oauth_webkit_continue_auth (BISHO_PANE (data), params);
+  } else {
+    bisho_pane_oauth_webkit_continue_auth (BISHO_PANE (data), NULL);
+  }
 }
 
 static void
