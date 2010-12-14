@@ -5,7 +5,7 @@ Link=http://www.digg.com/
 AuthType=oauth-webkit
 
 [OAuth]
-BaseURL=http://service.digg.com/
+BaseURL=http://services.digg.com/
 RequestTokenFunction=oauth/request_token
 AuthoriseFunction=oauth/authorize
 AccessTokenFunction=oauth/access_token
