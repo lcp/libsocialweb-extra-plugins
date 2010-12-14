@@ -103,7 +103,7 @@ g_print ("%s\n", uri);
   if (!priv->stop_url)
     return;
 
-  if (g_strrstr (uri, priv->stop_url)) {
+  if (g_str_has_prefix (uri, priv->stop_url)) {
     webkit_web_view_stop_loading (page);
     gtk_widget_hide (GTK_WIDGET (priv->window));
     if (priv->callback)
