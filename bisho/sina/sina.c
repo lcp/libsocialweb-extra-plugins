@@ -27,6 +27,7 @@
 #include <rest/oauth-proxy-call.h>
 #include <libsocialweb-keystore/sw-keystore.h>
 #include <bisho/service-info.h>
+#include "utils.h"
 #include "sina.h"
 
 /* TODO: use sw-keyring */
@@ -186,26 +187,6 @@ log_out_clicked (GtkButton *button, gpointer user_data)
                                  "server", priv->base_url,
                                  "consumer-key", priv->consumer_key,
                                  NULL);
-}
-
-static char *
-encode_tokens (const char *token, const char *secret)
-{
-  char *encoded_token, *encoded_secret;
-  char *string;
-
-  g_assert (token);
-  g_assert (secret);
-
-  encoded_token = g_base64_encode ((guchar*)token, strlen (token));
-  encoded_secret = g_base64_encode ((guchar*)secret, strlen (secret));
-
-  string = g_strconcat (encoded_token, " ", encoded_secret, NULL);
-
-  g_free (encoded_token);
-  g_free (encoded_secret);
-
-  return string;
 }
 
 static void
