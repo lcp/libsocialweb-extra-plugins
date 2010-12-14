@@ -63,8 +63,11 @@ PKG_CHECK_MODULES(BISHO_MODULE,
                   rest-0.7
                   libsoup-gnome-2.4
                   json-glib-1.0
-                  gconf-2.0 >= 1.2.0
-                  webkit-1.0)
+                  gconf-2.0 >= 1.2.0)
+
+PKG_CHECK_MODULES(UTIL, 
+                  webkit-1.0,
+                  gtk+-2.0)
 
 AC_MSG_CHECKING([Bisho modules dir])
 AC_ARG_WITH([bisho-modules-dir],
@@ -96,6 +99,7 @@ AC_OUTPUT([
         build-aux/shave:m4/shave.in
         build-aux/shave-libtool:m4/shave-libtool.in
         Makefile
+	utils/Makefile
 	bisho/Makefile
 	bisho/dummy/Makefile
 	bisho/sina/Makefile

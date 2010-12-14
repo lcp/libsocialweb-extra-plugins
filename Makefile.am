@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = services bisho po
+SUBDIRS = services utils bisho po
 
 DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-youtube \
