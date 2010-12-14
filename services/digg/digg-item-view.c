@@ -191,6 +191,59 @@ node_from_call (RestProxyCall *call, JsonParser *parser)
   return root;
 }
 
+static SwItem *
+make_item (SwService *service, JsonNode *entry)
+{
+  JsonObject *story, *thumbnails, *submiter;
+  JsonNode *node;
+  SwItem *item;
+  const gchar *str;
+  time_t date;
+
+  item = sw_item_new ();
+  sw_item_set_service (item, service);
+
+  story = json_node_get_object (entry);
+
+  node = json_object_get_member (story, "submiter");
+  submiter = json_node_get_object (node);
+
+  node = json_object_get_member (story, "thumbnails");
+  thumbnails = json_node_get_object (node);
+
+  /* id */
+  str = json_object_get_string_member (story, "story_id");
+  sw_item_take (item, "id", g_strconcat ("digg-", str, NULL));   
+
+  /* link */
+  str = json_object_get_string_member (story, "permalink");
+  sw_item_put (item, "url", str);
+
+  /* title */
+  str = json_object_get_string_member (story, "title");
+  sw_item_put (item, "title", str);
+
+  /* date */
+  date = (gulong) json_object_get_int_member (story, "date_created");
+  sw_item_take (item,
+                "date",
+                sw_time_t_to_string (date));
+
+  /* author */
+  str = json_object_get_string_member (submiter, "name");
+  sw_item_put (item, "author", str);
+
+  /* authorid */
+  str = json_object_get_string_member (submiter, "user_id");
+  sw_item_put (item, "authorid", str);
+
+  /* the thumbnail */
+  str = json_object_get_string_member (thumbnails, "large");
+  sw_item_request_image_fetch (item, TRUE, "thumbnail", str);
+
+  return item;
+}
+
 static void
 _got_diggs_cb (RestProxyCall *call,
                const GError  *error,
@@ -204,9 +257,9 @@ _got_diggs_cb (RestProxyCall *call,
 
   JsonParser *parser = NULL;
   JsonNode *root, *node;
-  JsonArray *json_array;
+  JsonArray *stories_array;
   JsonObject *object;
-  GList *stories = NULL, *list = NULL;
+  guint i, length;
 
   if (error) {
     g_message ("Error: %s", error->message);
@@ -248,67 +301,23 @@ _got_diggs_cb (RestProxyCall *call,
   set = sw_item_set_new ();
   node = json_object_get_member (object, "stories");
 
-  json_array = json_node_get_array (node);
-  stories = json_array_get_elements (json_array);
+  stories_array = json_node_get_array (node);
+  length = json_array_get_length (stories_array);
 
-  service = sw_item_view_get_service (item_view);
+  service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
-  /* TODO Move json code to _make_digg_item() */
-  for (list=stories; list ;list = g_list_next (list)) {
-    JsonObject *story, *thumbnails, *submiter;
+  for (i=0; i<length; i++) {
+    JsonNode *entry = json_array_get_element (stories_array, i);
     SwItem *item;
-    const gchar *str;
-    time_t date;
 
-    item = sw_item_new ();
-    sw_item_set_service (item, service);
+    item = make_item (service, entry);
 
-    node = (JsonNode *) list->data;
-    story = json_node_get_object (node);
-
-    node = json_object_get_member (story, "submiter");
-    submiter = json_node_get_object (node);
-
-    node = json_object_get_member (story, "thumbnails");
-    thumbnails = json_node_get_object (node);
-
-    /* id */
-    str = json_object_get_string_member (story, "story_id");
-    sw_item_take (item, "id", g_strconcat ("digg-", str, NULL));   
-
-    /* link */
-    str = json_object_get_string_member (story, "permalink");
-    sw_item_put (item, "url", str);
-
-    /* title */
-    str = json_object_get_string_member (story, "title");
-    sw_item_put (item, "title", str);
-
-    /* date */
-    date = (gulong) json_object_get_int_member (story, "date_created");
-    sw_item_take (item,
-                  "date",
-                  sw_time_t_to_string (date));
-
-    /* author */
-    str = json_object_get_string_member (submiter, "name");
-    sw_item_put (item, "author", str);
-
-    /* authorid */
-    str = json_object_get_string_member (submiter, "user_id");
-    sw_item_put (item, "authorid", str);
-
-    /* the thumbnail */
-    str = json_object_get_string_member (thumbnails, "large");
-    sw_item_request_image_fetch (item, TRUE, "thumbnail", str);
-    
     if (!sw_service_is_uid_banned (service, sw_item_get (item, "id")))
       sw_set_add (set, (GObject *)item);
 
     g_object_unref (item);
   }
 
-  g_list_free (stories);
   g_object_unref (parser);
   g_object_unref (call);
 
@@ -322,45 +331,18 @@ _got_diggs_cb (RestProxyCall *call,
 }
 
 static void
-_make_request (SwDiggItemView *item_view)
+_get_status_updates (SwDiggItemView *item_view)
 {
   SwDiggItemViewPrivate *priv = GET_PRIVATE (item_view);
   RestProxyCall *call;
 
   call = rest_proxy_new_call (priv->proxy);
-  rest_proxy_call_set_function (call, "story.getTopNews");
+  rest_proxy_call_set_function (call, "2.0/story.getTopNews");
 
   rest_proxy_call_add_params (call,
                               "limit", "10",
                               NULL);
   rest_proxy_call_async (call, _got_diggs_cb, (GObject *)item_view, NULL, NULL);
-}
-
-
-static void
-_got_tokens_cb (RestProxy *proxy,
-                gboolean   authorised,
-                gpointer   userdata)
-{
-  SwDiggItemView *item_view = SW_DIGG_ITEM_VIEW (userdata);
-
-  if (authorised) 
-  {
-    _make_request (item_view);
-  }
-
-  /* Drop reference we took for callback */
-  g_object_unref (item_view);
-}
-
-static void
-_get_status_updates (SwDiggItemView *item_view)
-{
-  SwDiggItemViewPrivate *priv = GET_PRIVATE (item_view);
-
-  sw_keyfob_oauth ((OAuthProxy *)priv->proxy,
-                    _got_tokens_cb,
-                    g_object_ref (item_view)); /* ref gets dropped in cb */
 }
 
 static gboolean
