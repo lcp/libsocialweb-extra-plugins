@@ -107,49 +107,20 @@ get_dynamic_caps (SwService *service)
 }
 
 static void
-check_tokens_cb (RestProxyCall *call,
-                 const GError  *error,
-                 GObject       *weak_object,
-                 gpointer       user_data)
-{
-  SwService *service = SW_SERVICE (weak_object);
-  SwServiceDiggPrivate *priv = GET_PRIVATE (service);
-/* TODO Verify the returned data */
-/*
-  RestXmlNode *root;
-
-  root = node_from_call (call);
-  if (root) {
-    priv->authorised = TRUE;
-    rest_xml_node_unref (root);
-  } else {
-    priv->authorised = FALSE;
-  }
-*/
-  sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
-}
-
-static void
 got_tokens_cb (RestProxy *proxy,
                gboolean   got_tokens,
                gpointer   user_data)
 {
   SwService *service = SW_SERVICE (user_data);
   SwServiceDiggPrivate *priv = GET_PRIVATE (service);
-  RestProxyCall *call;
 
   priv->configured = got_tokens;
   sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
 
   if (got_tokens && sw_is_online ()) {
-    call = rest_proxy_new_call (priv->proxy);
-    rest_proxy_call_set_function (call, "oauth.verify");
-    rest_proxy_call_async (call, check_tokens_cb, G_OBJECT (service), NULL, NULL);
-    /* TODO: error checking */
+    priv->authorised = TRUE;
+    sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
   }
-
-  /* Drop reference we took for callback */
-  g_object_unref (service);
 }
 
 static void
@@ -162,7 +133,7 @@ credentials_updated (SwService *service)
 
   sw_keyfob_oauth (OAUTH_PROXY (priv->proxy),
                    got_tokens_cb,
-                   g_object_ref (service)); /* ref gets dropped in cb */
+                   service);
 
   sw_service_emit_user_changed (service);
   sw_service_emit_capabilities_changed (service, get_dynamic_caps (service));
@@ -175,7 +146,9 @@ online_notify (gboolean online, gpointer user_data)
   SwServiceDiggPrivate *priv = GET_PRIVATE (service);
 
   if (online) {
-    got_tokens_cb (priv->proxy, TRUE, service);
+    sw_keyfob_oauth (OAUTH_PROXY (priv->proxy),
+                     got_tokens_cb,
+                     service);
   } else {
     priv->authorised = FALSE;
 
@@ -223,7 +196,7 @@ sw_service_digg_initable (GInitable    *initable,
     return FALSE;
   }
 
-  priv->proxy = oauth_proxy_new (key, secret, "http://services.digg.com/2.0/", FALSE);
+  priv->proxy = oauth_proxy_new (key, secret, "http://services.digg.com/", FALSE);
 
   sw_online_add_notify (online_notify, digg);
 
