@@ -38,7 +38,8 @@ struct _AuthBrowserPrivate {
   char *title;
   int progress;
   char *stop_url;
-  void (*callback) (const char *url);
+  void (*callback) (gpointer data, const char *url);
+  gpointer data;
 };
 
 static void
@@ -106,7 +107,7 @@ g_print ("%s\n", uri);
     webkit_web_view_stop_loading (page);
     gtk_widget_hide (GTK_WIDGET (priv->window));
     if (priv->callback)
-      priv->callback (uri);
+      priv->callback (priv->data, uri);
   }
 }
 
@@ -115,7 +116,8 @@ void
 auth_browser_open_url (AuthBrowser *browser,
                        const char  *url,
                        const char  *stop_url,
-                       void       (*callback) (const char *url))
+                       void       (*callback) (gpointer data, const char *url),
+                       gpointer     data)
 {
   AuthBrowserPrivate *priv = GET_PRIVATE (browser);
 
@@ -124,6 +126,8 @@ auth_browser_open_url (AuthBrowser *browser,
 
   if (callback)
     priv->callback = callback;
+
+  priv->data = data;
 
   webkit_web_view_open (priv->webview, url);
 
