@@ -38,7 +38,7 @@ struct _AuthBrowserPrivate {
   char *title;
   int progress;
   char *stop_url;
-  void (*stop_handler) (const char *url);
+  void (*callback) (const char *url);
 };
 
 static void
@@ -105,8 +105,8 @@ g_print ("%s\n", uri);
   if (g_strrstr (uri, priv->stop_url)) {
     webkit_web_view_stop_loading (page);
     gtk_widget_hide (GTK_WIDGET (priv->window));
-    if (priv->stop_handler)
-      priv->stop_handler (uri);
+    if (priv->callback)
+      priv->callback (uri);
   }
 }
 
@@ -115,19 +115,30 @@ void
 auth_browser_open_url (AuthBrowser *browser,
                        const char  *url,
                        const char  *stop_url,
-                       void         (*stop_handler)(const char *url))
+                       void       (*callback) (const char *url))
 {
   AuthBrowserPrivate *priv = GET_PRIVATE (browser);
 
   g_free (priv->stop_url);
   priv->stop_url = g_strdup (stop_url);
-  if (stop_handler)
-    priv->stop_handler = stop_handler;
+
+  if (callback)
+    priv->callback = callback;
 
   webkit_web_view_open (priv->webview, url);
 
   gtk_widget_grab_focus (GTK_WIDGET (priv->webview));
   gtk_widget_show_all (priv->window);
+}
+
+
+/* Hide the authentication browser */
+void
+auth_browser_hide (AuthBrowser *browser)
+{
+  AuthBrowserPrivate *priv = GET_PRIVATE (browser);
+
+  gtk_widget_hide (priv->window);
 }
 
 static void
@@ -177,7 +188,7 @@ auth_browser_init (AuthBrowser *self)
   priv->title = NULL;
   priv->progress = 0;
   priv->stop_url = NULL;
-  priv->stop_handler = NULL;
+  priv->callback = NULL;
 
   vbox = gtk_vbox_new (FALSE, 0);
   scrolled_window = gtk_scrolled_window_new (NULL, NULL);
@@ -190,8 +201,7 @@ auth_browser_init (AuthBrowser *self)
   priv->window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size (GTK_WINDOW (priv->window), DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
   gtk_widget_set_name (priv->window, "AuthBrowser");
-  gtk_window_set_screen (GTK_WINDOW (priv->window), gdk_screen_get_default ());
-  //gtk_window_set_modal (window, TRUE);
+//  gtk_window_set_screen (GTK_WINDOW (priv->window), gdk_screen_get_default ());
  
   gtk_container_add (GTK_CONTAINER (priv->window), vbox);
 

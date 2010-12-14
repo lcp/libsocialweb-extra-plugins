@@ -56,7 +56,8 @@ AuthBrowser* auth_browser_new (void);
 void auth_browser_open_url (AuthBrowser *browser,
                             const char  *url,
                             const char  *stop_url,
-                            void        (*stop_handler)(const char *url));
+                            void       (*callback) (const char *url));
+void auth_browser_hide     (AuthBrowser *browser);
 
 G_BEGIN_DECLS
 
