@@ -28,6 +28,7 @@
 #include <libsocialweb-keystore/sw-keystore.h>
 #include <bisho/service-info.h>
 #include "utils.h"
+#include "auth-browser.h"
 #include "myspace.h"
 
 /* TODO: use sw-keyring */
@@ -54,6 +55,7 @@ struct _BishoPaneMySpacePrivate {
   GtkWidget *pin_label;
   GtkWidget *pin_entry;
   GtkWidget *button;
+  AuthBrowser *browser;
 };
 
 typedef enum {
@@ -82,9 +84,11 @@ create_url (BishoPaneMySpace *pane, const char *token)
   uri = soup_uri_new_with_base (base, pane->priv->authorize_function);
   soup_uri_free (base);
 
+  /* Request permission, UpdateMoodStatus, for myspace app */
   soup_uri_set_query_from_fields (uri,
                                   "oauth_token", token,
                                   "oauth_callback", pane->priv->callback ?: "",
+                                  "myspaceid.permissions", "UpdateMoodStatus",
                                   NULL);
 
   s = soup_uri_to_string (uri, FALSE);
@@ -97,6 +101,8 @@ G_GNUC_UNUSED static const char * unused_for_now[] = {
   N_("You could check that the computer's clock is correct."),
   N_("You could try again.")
 };
+
+static void got_auth_cb (gpointer data, const char *url);
 
 static void
 request_token_cb (OAuthProxy   *proxy,
@@ -118,21 +124,9 @@ request_token_cb (OAuthProxy   *proxy,
   }
 
   url = create_url (pane, oauth_proxy_get_token (OAUTH_PROXY (priv->proxy)));
-  gtk_show_uri (gtk_widget_get_screen (GTK_WIDGET (pane)), url, GDK_CURRENT_TIME, NULL);
+  auth_browser_open_url (priv->browser, url, priv->callback, got_auth_cb, pane);
 
-  if (priv->callback == NULL) {
-    update_widgets (pane, CONTINUE_AUTH_10);
-  } else {
-    /* TODO: insert check for 1.0a? */
-    if (strcmp (priv->callback, "oob") == 0) {
-      update_widgets (pane, CONTINUE_AUTH_10a);
-    } else {
-      update_widgets (pane, CONTINUE_AUTH_10);
-      /* TODO: should be
-         update_widgets (pane, WORKING);
-         but myspace breaks this at the moment */
-    }
-  }
+  update_widgets (pane, CONTINUE_AUTH_10);
 }
 
 static void
@@ -292,6 +286,12 @@ static void
 continue_clicked (GtkWidget *button, gpointer user_data)
 {
   bisho_pane_myspace_continue_auth (BISHO_PANE (user_data), NULL);
+}
+
+static void
+got_auth_cb (gpointer data, const char *url)
+{
+  bisho_pane_myspace_continue_auth (BISHO_PANE (data), NULL);
 }
 
 static void
@@ -460,6 +460,8 @@ bisho_pane_myspace_init (BishoPaneMySpace *pane)
   priv->button = gtk_button_new ();
   gtk_widget_show (priv->button);
   gtk_box_pack_start (GTK_BOX (box), priv->button, FALSE, FALSE, 0);
+
+  priv->browser = auth_browser_new ();
 }
 
 void
