@@ -33,6 +33,7 @@
 #include <rest/rest-proxy.h>
 #include <rest/rest-xml-parser.h>
 #include <libsoup/soup.h>
+#include "utils.h"
 
 #include "digg-item-view.h"
 #include "digg.h"
@@ -159,38 +160,6 @@ sw_digg_item_view_finalize (GObject *object)
   G_OBJECT_CLASS (sw_digg_item_view_parent_class)->finalize (object);
 }
 
-static JsonNode *
-node_from_call (RestProxyCall *call, JsonParser *parser)
-{
-  JsonNode *root;
-  GError *error;
-  gboolean ret = FALSE;
-
-  if (call == NULL)
-    return NULL;
-
-  if (!SOUP_STATUS_IS_SUCCESSFUL (rest_proxy_call_get_status_code (call))) {
-    g_message ("Error from Digg: %s (%d)",
-               rest_proxy_call_get_status_message (call),
-               rest_proxy_call_get_status_code (call));
-    return NULL;
-  }
-
-  ret = json_parser_load_from_data (parser,
-                                    rest_proxy_call_get_payload (call),
-                                    rest_proxy_call_get_payload_length (call),
-                                    &error);
-  root = json_parser_get_root (parser);
-
-  if (root == NULL) {
-    g_message ("Error from Digg: %s",
-               rest_proxy_call_get_payload (call));
-    return NULL;
-  }
-
-  return root;
-}
-
 static SwItem *
 make_item (SwService *service, JsonNode *entry)
 {
@@ -269,7 +238,6 @@ _got_diggs_cb (RestProxyCall *call,
   SwService *service;
   SwSet *set;
 
-  JsonParser *parser = NULL;
   JsonNode *root, *node;
   JsonArray *stories_array;
   JsonObject *object;
@@ -280,8 +248,7 @@ _got_diggs_cb (RestProxyCall *call,
     return;
   }
 
-  parser = json_parser_new ();
-  root = node_from_call (call, parser);
+  root = json_node_from_call (call, "Digg");
   if (!root)
     return;
 
@@ -361,7 +328,6 @@ _got_diggs_cb (RestProxyCall *call,
     g_object_unref (item);
   }
 
-  g_object_unref (parser);
   g_object_unref (call);
 
   sw_item_view_set_from_set (item_view, set);
