@@ -263,6 +263,77 @@ make_date (const char *s)
   return sw_time_t_to_string (timegm (&tm));
 }
 
+static SwItem *
+make_item (SwService *service, JsonNode *plurk_node, JsonNode *plurk_users)
+{
+  JsonNode *node;
+  JsonObject *plurk, *user, *object;
+  char *uid, *pid, *url, *date, *base36, *content;
+  const char *name, *qualifier;
+  gint64 id, avatar, has_profile;
+  SwItem *item;
+
+  item = sw_item_new ();
+  sw_item_set_service (item, service);
+
+  /* Get the plurk object */
+  plurk = json_node_get_object (plurk_node);
+
+  if (!json_object_has_member (plurk, "owner_id"))
+    return NULL;
+
+  /* Get the user object */
+  id = json_object_get_int_member (plurk, "owner_id");
+  uid = g_strdup_printf ("%lld", id);
+  object = json_node_get_object (plurk_users);
+  node = json_object_get_member (object, uid);
+  user = json_node_get_object (node);
+
+  if (!user)
+    return NULL;
+
+  /* authorid */
+  sw_item_take (item, "authorid", uid);
+
+  /* Construct the id of sw_item */
+  id = json_object_get_int_member (plurk, "plurk_id");
+  pid = g_strdup_printf ("%lld", id);
+  sw_item_take (item, "id", g_strconcat ("plurk-", pid, NULL));
+
+  /* Get the display name of the user */
+  name = json_object_get_string_member (user, "full_name");
+  sw_item_put (item, "author", name);
+
+  /* Construct the avatar url */
+  avatar = json_object_get_int_member (user, "avatar");
+  has_profile = json_object_get_int_member (user, "has_profile_image");
+  url = construct_image_url (uid, avatar, has_profile);
+  sw_item_request_image_fetch (item, FALSE, "authoricon", url);
+  g_free (url);
+
+  /* Construct the content of the plurk*/
+  if (json_object_has_member (plurk, "qualifier_translated"))
+    qualifier = json_object_get_string_member (plurk, "qualifier_translated");
+  else
+    qualifier = json_object_get_string_member (plurk, "qualifier");
+  content = g_strdup_printf ("%s %s",
+                             qualifier,
+                             json_object_get_string_member (plurk, "content_raw"));
+  sw_item_take (item, "content", content);
+
+  /* Get the post date of this plurk*/
+  date = make_date (json_object_get_string_member (plurk, "posted"));
+  sw_item_take (item, "date", date);
+
+  /* Construt the link of the user */
+  base36 = base36_encode (pid);
+  url = g_strconcat ("http://www.plurk.com/p/", base36, NULL);
+  g_free (base36);
+  sw_item_take (item, "url", url);
+
+  return item;
+}
+
 static void
 _got_status_updates_cb (RestProxyCall *call,
                         const GError  *error,
@@ -273,11 +344,11 @@ _got_status_updates_cb (RestProxyCall *call,
   SwPlurkItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwService *service;
   JsonParser *parser = NULL;
-  JsonNode *root, *plurks, *plurk_users, *node;
-  JsonArray *j_array;
+  JsonNode *root, *plurks, *plurk_users;
+  JsonArray *plurks_array;
   JsonObject *object;
   SwSet *set;
-  GList *plurks_ids = NULL, *list = NULL;
+  guint i, length;
 
   if (error) {
     g_message ("Error: %s", error->message);
@@ -302,74 +373,16 @@ _got_status_updates_cb (RestProxyCall *call,
   plurk_users = json_object_get_member (object, "plurk_users");
 
   /* Parser the data and file the set */
-  j_array = json_node_get_array (plurks);
-  plurks_ids = json_array_get_elements (j_array);
+  plurks_array = json_node_get_array (plurks);
+  length = json_array_get_length (plurks_array);
 
-  for (list=plurks_ids; list ;list = g_list_next (list)) {
-    JsonObject *plurk, *user;
-    char *uid, *pid, *url, *date, *base36, *content;
-    const char *name, *qualifier;
-    gint64 id, avatar, has_profile;
+  for (i=0; i<length; i++) {
+    JsonNode *plurk_node = json_array_get_element (plurks_array, i);
     SwItem *item;
 
-    item = sw_item_new ();
-    sw_item_set_service (item, service);
-
-    /* Get the plurk object */
-    node = (JsonNode *) list->data;
-    plurk = json_node_get_object (node);
-
-    if (!json_object_has_member (plurk, "owner_id"))
+    item = make_item (service, plurk_node, plurk_users);
+    if (!item)
       continue;
-
-    /* Get the user object */
-    id = json_object_get_int_member (plurk, "owner_id");
-    uid = g_strdup_printf ("%lld", id);
-    object = json_node_get_object (plurk_users);
-    node = json_object_get_member (object, uid);
-    user = json_node_get_object (node);
-
-    if (!user)
-      continue;
-
-    /* authorid */
-    sw_item_take (item, "authorid", uid);
-
-    /* Construct the id of sw_item */
-    id = json_object_get_int_member (plurk, "plurk_id");
-    pid = g_strdup_printf ("%lld", id);
-    sw_item_take (item, "id", g_strconcat ("plurk-", pid, NULL));
-
-    /* Get the display name of the user */
-    name = json_object_get_string_member (user, "full_name");
-    sw_item_put (item, "author", name);
-
-    /* Construct the avatar url */
-    avatar = json_object_get_int_member (user, "avatar");
-    has_profile = json_object_get_int_member (user, "has_profile_image");
-    url = construct_image_url (uid, avatar, has_profile);
-    sw_item_request_image_fetch (item, FALSE, "authoricon", url);
-    g_free (url);
-
-    /* Construct the content of the plurk*/
-    if (json_object_has_member (plurk, "qualifier_translated"))
-      qualifier = json_object_get_string_member (plurk, "qualifier_translated");
-    else
-      qualifier = json_object_get_string_member (plurk, "qualifier");
-    content = g_strdup_printf ("%s %s",
-                               qualifier,
-                               json_object_get_string_member (plurk, "content_raw"));
-    sw_item_take (item, "content", content);
-
-    /* Get the post date of this plurk*/
-    date = make_date (json_object_get_string_member (plurk, "posted"));
-    sw_item_take (item, "date", date);
-
-    /* Construt the link of the user */
-    base36 = base36_encode (pid);
-    url = g_strconcat ("http://www.plurk.com/p/", base36, NULL);
-    g_free (base36);
-    sw_item_take (item, "url", url);
 
     /* Add the item into the set */
     if (!sw_service_is_uid_banned (service,
@@ -388,7 +401,6 @@ _got_status_updates_cb (RestProxyCall *call,
                  priv->params,
                  set);
 
-  g_list_free (plurks_ids);
   g_object_unref (parser);
   g_object_unref (call);
 }
