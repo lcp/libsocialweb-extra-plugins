@@ -1,3 +1,12 @@
+Version 0.1.1
+- Digg: Update layout and the json sample
+- Digg: Handle empty description
+- Plurk: Clean up status update bits
+- Add json_node_from_call() to utils
+- Digg: Use json_node_from_call() instead of node_from_call
+- MySpace: Use json_node_from_call() instead of node_from_call()
+- Plurk: Use json_node_from_call() instead of node_from_call()
+
 Version 0.1.0
 - Resize Digg banner
 - Dummy Remove deprecated refresh()
