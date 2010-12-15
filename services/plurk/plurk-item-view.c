@@ -34,6 +34,8 @@
 #include <libsocialweb/sw-item.h>
 #include <libsocialweb/sw-cache.h>
 
+#include "utils.h"
+
 #include "plurk-item-view.h"
 
 G_DEFINE_TYPE (SwPlurkItemView,
@@ -177,38 +179,6 @@ sw_plurk_item_view_finalize (GObject *object)
   G_OBJECT_CLASS (sw_plurk_item_view_parent_class)->finalize (object);
 }
 
-static JsonNode *
-node_from_call (RestProxyCall *call, JsonParser *parser)
-{
-  JsonNode *root;
-  GError *error;
-  gboolean ret = FALSE;
-
-  if (call == NULL)
-    return NULL;
-
-  if (!SOUP_STATUS_IS_SUCCESSFUL (rest_proxy_call_get_status_code (call))) {
-    g_message ("Error from Plurk: %s (%d)",
-               rest_proxy_call_get_status_message (call),
-               rest_proxy_call_get_status_code (call));
-    return NULL;
-  }
-
-  ret = json_parser_load_from_data (parser,
-                                    rest_proxy_call_get_payload (call),
-                                    rest_proxy_call_get_payload_length (call),
-                                    &error);
-  root = json_parser_get_root (parser);
-
-  if (root == NULL) {
-    g_message ("Error from Plurk: %s",
-               rest_proxy_call_get_payload (call));
-    return NULL;
-  }
-
-  return root;
-}
-
 static char *
 construct_image_url (const char *uid,
                      const gint64 avatar,
@@ -343,7 +313,6 @@ _got_status_updates_cb (RestProxyCall *call,
   SwPlurkItemView *item_view = SW_PLURK_ITEM_VIEW (weak_object);
   SwPlurkItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwService *service;
-  JsonParser *parser = NULL;
   JsonNode *root, *plurks, *plurk_users;
   JsonArray *plurks_array;
   JsonObject *object;
@@ -356,9 +325,7 @@ _got_status_updates_cb (RestProxyCall *call,
     return;
   }
 
-  parser = json_parser_new ();
-
-  root = node_from_call (call, parser);
+  root = json_node_from_call (call, "Plurk");
   if (!root)
     return;
 
@@ -401,7 +368,6 @@ _got_status_updates_cb (RestProxyCall *call,
                  priv->params,
                  set);
 
-  g_object_unref (parser);
   g_object_unref (call);
 }
 
