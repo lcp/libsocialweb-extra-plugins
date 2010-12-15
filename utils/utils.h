@@ -17,9 +17,14 @@
  * this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <json-glib/json-glib.h>
+
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
-char *encode_tokens (const char *token, const char *secret);
+char     *encode_tokens       (const char    *token,
+                               const char    *secret);
+JsonNode *json_node_from_call (RestProxyCall *call,
+                               const char    *name);
 
 #endif /* _UTILS_H_ */
