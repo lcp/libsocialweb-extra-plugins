@@ -219,10 +219,6 @@ make_item (SwService *service, JsonNode *entry)
   str = json_object_get_string_member (story, "permalink");
   sw_item_put (item, "url", str);
 
-  /* content */
-  str = json_object_get_string_member (story, "description");
-  sw_item_put (item, "content", str);
-
   /* title */
   str = json_object_get_string_member (story, "title");
   sw_item_put (item, "title", str);
@@ -241,9 +237,23 @@ make_item (SwService *service, JsonNode *entry)
   str = json_object_get_string_member (submiter, "user_id");
   sw_item_put (item, "authorid", str);
 
-  /* the thumbnail */
-  str = json_object_get_string_member (thumbnails, "large");
-  sw_item_request_image_fetch (item, TRUE, "authoricon", str);
+  str = json_object_get_string_member (story, "description");
+  if (str) {
+    /* content */
+    sw_item_put (item, "content", str);
+
+    /*authoricon */
+    str = json_object_get_string_member (thumbnails, "large");
+    sw_item_request_image_fetch (item, TRUE, "authoricon", str);
+  } else {
+    /* thumbnail */
+    str = json_object_get_string_member (thumbnails, "large");
+    sw_item_request_image_fetch (item, TRUE, "thumbnail", str);
+
+    /* authoricon */
+    str = json_object_get_string_member (submiter, "icon");
+    sw_item_request_image_fetch (item, TRUE, "authoricon", str);
+  }
 
   return item;
 }
