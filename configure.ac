@@ -67,7 +67,10 @@ PKG_CHECK_MODULES(BISHO_MODULE,
 
 PKG_CHECK_MODULES(UTIL, 
                   webkit-1.0
-                  gtk+-2.0)
+                  gtk+-2.0
+                  rest-0.7 rest-extras-0.7 >= 0.7.1
+                  libsoup-2.4
+                  json-glib-1.0)
 
 AC_MSG_CHECKING([Bisho modules dir])
 AC_ARG_WITH([bisho-modules-dir],
