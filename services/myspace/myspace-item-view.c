@@ -33,6 +33,8 @@
 #include <libsocialweb/sw-item.h>
 #include <libsocialweb/sw-cache.h>
 
+#include "utils.h"
+
 #include "myspace-item-view.h"
 #include "myspace.h"
 
@@ -160,38 +162,6 @@ sw_myspace_item_view_finalize (GObject *object)
   g_hash_table_unref (priv->params);
 
   G_OBJECT_CLASS (sw_myspace_item_view_parent_class)->finalize (object);
-}
-
-static JsonNode *
-node_from_call (RestProxyCall *call, JsonParser *parser)
-{
-  JsonNode *root;
-  GError *error;
-  gboolean ret = FALSE;
-
-  if (call == NULL)
-    return NULL;
-
-  if (!SOUP_STATUS_IS_SUCCESSFUL (rest_proxy_call_get_status_code (call))) {
-    g_message ("Error from MySpace: %s (%d)",
-               rest_proxy_call_get_status_message (call),
-               rest_proxy_call_get_status_code (call));
-    return NULL;
-  }
-
-  ret = json_parser_load_from_data (parser,
-                                    rest_proxy_call_get_payload (call),
-                                    rest_proxy_call_get_payload_length (call),
-                                    &error);
-  root = json_parser_get_root (parser);
-
-  if (root == NULL) {
-    g_message ("Error from MySpace: %s",
-               rest_proxy_call_get_payload (call));
-    return NULL;
-  }
-
-  return root;
 }
 
 static char *
@@ -328,7 +298,6 @@ _got_status_cb (RestProxyCall *call,
   SwMySpaceItemView *item_view = SW_MYSPACE_ITEM_VIEW (weak_object);
   SwMySpaceItemViewPrivate *priv = GET_PRIVATE (item_view);
   SwSet *set = (SwSet *)userdata;
-  JsonParser *parser = NULL;
   JsonNode *root;
   SwService *service;
 
@@ -339,8 +308,7 @@ _got_status_cb (RestProxyCall *call,
 
   service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
-  parser = json_parser_new ();
-  root = node_from_call (call, parser);
+  root = json_node_from_call (call, "MySpace");
   if (root == NULL)
     return;
 
@@ -358,7 +326,6 @@ _got_status_cb (RestProxyCall *call,
 
   sw_set_unref (set);
 
-  g_object_unref (parser);
   g_object_unref (root);
 }
 
