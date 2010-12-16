@@ -20,7 +20,6 @@
 #include <glib.h>
 #include <string.h>
 #include <libsoup/soup.h>
-#include <rest/rest-proxy-call.h>
 #include "utils.h"
 
 char *
@@ -44,8 +43,8 @@ encode_tokens (const char *token, const char *secret)
 }
 
 JsonNode *
-json_node_from_call (const RestProxyCall *call,
-                     const char *name)
+json_node_from_call (RestProxyCall *call,
+                     const char    *name)
 {
   JsonParser *parser;
   JsonNode *root = NULL;
@@ -86,3 +85,62 @@ out:
   return root;
 }
 
+
+RestXmlNode *
+xml_node_from_call (RestProxyCall *call,
+                    const char    *name)
+{
+  static RestXmlParser *parser = NULL;
+  RestXmlNode *root;
+
+  if (call == NULL)
+    return NULL;
+
+  if (parser == NULL)
+    parser = rest_xml_parser_new ();
+
+  if (!SOUP_STATUS_IS_SUCCESSFUL (rest_proxy_call_get_status_code (call))) {
+    g_message ("Error from %s: %s (%d)",
+               name,
+               rest_proxy_call_get_status_message (call),
+               rest_proxy_call_get_status_code (call));
+    return NULL;
+  }
+
+  root = rest_xml_parser_parse_from_data (parser,
+                                          rest_proxy_call_get_payload (call),
+                                          rest_proxy_call_get_payload_length (call));
+
+  if (root == NULL) {
+    g_message ("Error from %s: %s",
+               name,
+               rest_proxy_call_get_payload (call));
+    return NULL;
+  }
+
+  return root;
+}
+
+/*
+ * For a given parent @node, get the child node called @name and return a copy
+ * of the content, or NULL. If the content is the empty string, NULL is
+ * returned.
+ */
+char *
+xml_get_child_node_value (RestXmlNode *node,
+                          const char  *name)
+{
+  RestXmlNode *subnode;
+
+  g_assert (node);
+  g_assert (name);
+
+  subnode = rest_xml_node_find (node, name);
+  if (!subnode)
+    return NULL;
+
+  if (subnode->content && subnode->content[0])
+    return g_strdup (subnode->content);
+  else
+    return NULL;
+}
