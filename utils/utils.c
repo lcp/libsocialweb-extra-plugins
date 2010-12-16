@@ -118,6 +118,17 @@ xml_node_from_call (RestProxyCall *call,
     return NULL;
   }
 
+  /* Exception handling */
+  if (strcmp (name, "Youtube") == 0) {
+    if (strcmp (root->name, "error_response") == 0) {
+      RestXmlNode *node;
+      node = rest_xml_node_find (root, "error_msg");
+      g_message ("Error response from Youtube: %s\n", node->content);
+      rest_xml_node_unref (root);
+      return NULL;
+    }
+  }
+
   return root;
 }
 
