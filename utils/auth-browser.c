@@ -141,8 +141,18 @@ void
 auth_browser_hide (AuthBrowser *browser)
 {
   AuthBrowserPrivate *priv = GET_PRIVATE (browser);
+  SoupSession *session = webkit_get_default_session ();
+  SoupCookieJar* jar = (SoupCookieJar*)soup_session_get_feature (session, SOUP_TYPE_COOKIE_JAR);
+  GSList *l, *p;
 
   gtk_widget_hide (priv->window);
+
+  /* clear cookies */
+  l = soup_cookie_jar_all_cookies (jar);
+  for (p = l; p; p = p->next)
+    soup_cookie_jar_delete_cookie (jar, (SoupCookie*)p->data);
+
+  soup_cookies_free (l);
 }
 
 static void
