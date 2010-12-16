@@ -1,54 +1,53 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Italian translations for libsocialweb.
+# Copyright (C) 2009 the libsocialweb's copyright holder
+# This file is distributed under the same license as the libsocialweb package.
+# Milo Casagrande <milo@ubuntu.com>, 2009.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Libsocialweb\n"
+"Project-Id-Version: libsocialweb\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2010-12-16 14:55+0800\n"
-"PO-Revision-Date: 2010-03-04 09:01-0800\n"
-"Last-Translator: Margie Foster <margie@linux.intel.com>\n"
-"Language-Team: British English <margie@linux.intel.com>\n"
+"PO-Revision-Date: 2009-12-11 19:54+0100\n"
+"Last-Translator: Milo Casagrande <milo@ubuntu.com>\n"
+"Language-Team: Italian <tp@lists.linux.it>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=n!=1;\n"
-"X-Poedit-Language: English\n"
-"X-Poedit-Country: UNITED KINGDOM\n"
-"X-Poedit-SourceCharset: utf-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:112 ../bisho/sina/sina.c:94
 msgid "You don't seem to have a network connection, this won't work."
-msgstr "You don't seem to have a network connection, so this won't work."
+msgstr "La connessione di rete non sembra attiva, questo non funzionerà."
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:113 ../bisho/sina/sina.c:95
 msgid "You could check that the computer's clock is correct."
-msgstr "You could check that the computer's clock is correct."
+msgstr "Controllare che l'orologio del computer sia corretto."
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:114 ../bisho/sina/sina.c:96
 msgid "You could try again."
-msgstr "You could try again."
+msgstr "Provare nuovamente"
 
+# (ndt) pulsante
 #: ../bisho/oauth-webkit/oauth-webkit.c:348 ../bisho/sina/sina.c:312
 msgid "Log me in"
-msgstr "Log me in"
+msgstr "Accedi"
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:352 ../bisho/sina/sina.c:316
 msgid "Connecting..."
-msgstr "Connecting..."
+msgstr "Connessione..."
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:361 ../bisho/sina/sina.c:325
 #, c-format
 msgid "Once you have logged in to %s, press Continue."
-msgstr "Once you have logged in to %s, click Continue."
+msgstr "Una volta eseguito l'accesso a %s, fare clic su «Continua»."
 
+# (ndt) pulsante
 #: ../bisho/oauth-webkit/oauth-webkit.c:366
 #: ../bisho/oauth-webkit/oauth-webkit.c:383 ../bisho/sina/sina.c:330
 #: ../bisho/sina/sina.c:347
 msgid "Continue"
-msgstr "Continue"
+msgstr "Continua"
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:378 ../bisho/sina/sina.c:342
 #, c-format
@@ -56,43 +55,45 @@ msgid ""
 "Once you have logged in to %s, enter the code they give you and press "
 "Continue."
 msgstr ""
-"Once you have logged in to %s, enter the code you see and press Continue."
+"Una volta eseguito l'accesso a %s, inserire il codice fornito e fare clic su "
+"«Continua»."
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:388 ../bisho/sina/sina.c:352
 msgid "Log in succeeded. You'll see new items in a couple of minutes."
-msgstr "Log in succeeded. You'll see new items in a couple of minutes."
+msgstr ""
+"Accesso eseguito. In un paio di minuti verranno visualizzati nuovi elementi."
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:390 ../bisho/sina/sina.c:354
 msgid "Log me out"
-msgstr "Log me out"
+msgstr "Disconnetti"
 
 #: ../bisho/oauth-webkit/oauth-webkit.c:487 ../bisho/sina/sina.c:451
 msgid "Code:"
-msgstr "Code:"
+msgstr "Codice:"
 
 #: ../services/plurk/plurk.keys.in.h:1
 msgid "Plurk"
-msgstr "Plurk"
+msgstr ""
 
 #: ../services/plurk/plurk.keys.in.h:2
 msgid "Plurk is a web site that allows people to share ideas."
-msgstr "Plurk is a web site that allows people to share ideas."
+msgstr ""
 
 #: ../services/sina/sina.keys.in.h:1
 msgid "Sina"
-msgstr "Sina"
+msgstr ""
 
 #: ../services/sina/sina.keys.in.h:2
 msgid "Sina microblogging"
-msgstr "Sina microblogging"
+msgstr ""
 
 #: ../services/youtube/youtube.keys.in.h:1
 msgid "Youtube"
-msgstr "Youtube"
+msgstr ""
 
 #: ../services/youtube/youtube.keys.in.h:2
 msgid "Youtube is a popular video sharing website"
-msgstr "Youtube is a popular video sharing website"
+msgstr ""
 
 #: ../services/digg/digg.keys.in.h:1
 msgid "Digg"
@@ -100,7 +101,7 @@ msgstr "Digg"
 
 #: ../services/digg/digg.keys.in.h:2
 msgid "Digg - to share news, video and images"
-msgstr "Digg - to share news, video and images"
+msgstr "Digg - Condividere notizie, video e immagini"
 
 #: ../services/myspace/myspace.keys.in.h:1
 msgid "MySpace"
@@ -113,7 +114,8 @@ msgid ""
 "and viral videos, blog, instant message your friends, and listen to music on "
 "the world’s largest music community."
 msgstr ""
-"MySpace is a leading social portal for connecting people, content, and "
-"culture from around the world. Create a profile, share photos, professional "
-"and viral videos, blog, instant message your friends, and listen to music on "
-"the world’s largest music community."
+"MySpace è un portale sociale che consente di collegare persone, contenuti e "
+"diverse culture da tutto il mondo. Basta creare un profilo per condividere "
+"fotografie, video professionali e \"virali\", blog, scambiare messaggi "
+"istantanei con i propri amici e ascoltare musica grazie alla più grande "
+"comunità musicale del mondo."
