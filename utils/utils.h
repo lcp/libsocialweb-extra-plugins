@@ -22,9 +22,9 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
-char     *encode_tokens       (const char    *token,
-                               const char    *secret);
-JsonNode *json_node_from_call (RestProxyCall *call,
-                               const char    *name);
+char     *encode_tokens       (const char          *token,
+                               const char          *secret);
+JsonNode *json_node_from_call (const RestProxyCall *call,
+                               const char          *name);
 
 #endif /* _UTILS_H_ */

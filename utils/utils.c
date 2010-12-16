@@ -44,7 +44,8 @@ encode_tokens (const char *token, const char *secret)
 }
 
 JsonNode *
-json_node_from_call (RestProxyCall *call, const char *name)
+json_node_from_call (const RestProxyCall *call,
+                     const char *name)
 {
   JsonParser *parser;
   JsonNode *root = NULL;
