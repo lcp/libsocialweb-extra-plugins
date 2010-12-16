@@ -35,6 +35,8 @@
 
 #include <glib/gi18n.h>
 
+#include "utils.h"
+
 #include "youtube-item-view.h"
 #include "youtube.h"
 
@@ -175,69 +177,6 @@ sw_youtube_item_view_finalize (GObject *object)
   G_OBJECT_CLASS (sw_youtube_item_view_parent_class)->finalize (object);
 }
 
-RestXmlNode *
-node_from_call (RestProxyCall *call)
-{
-  static RestXmlParser *parser = NULL;
-  RestXmlNode *root;
-
-  if (call == NULL)
-    return NULL;
-
-  if (parser == NULL)
-    parser = rest_xml_parser_new ();
-
-  if (!SOUP_STATUS_IS_SUCCESSFUL (rest_proxy_call_get_status_code (call))) {
-    g_message ("Error from Youtube: %s (%d)",
-               rest_proxy_call_get_status_message (call),
-               rest_proxy_call_get_status_code (call));
-    return NULL;
-  }
-
-  root = rest_xml_parser_parse_from_data (parser,
-                                          rest_proxy_call_get_payload (call),
-                                          rest_proxy_call_get_payload_length (call));
-
-  if (root == NULL) {
-    g_message ("Error from Youtube: %s",
-               rest_proxy_call_get_payload (call));
-    return NULL;
-  }
-
-  if (strcmp (root->name, "error_response") == 0) {
-    RestXmlNode *node;
-    node = rest_xml_node_find (root, "error_msg");
-    g_message ("Error response from Youtube: %s\n", node->content);
-    rest_xml_node_unref (root);
-    return NULL;
-  } else {
-    return root;
-  }
-}
-
-/*
- * For a given parent @node, get the child node called @name and return a copy
- * of the content, or NULL. If the content is the empty string, NULL is
- * returned.
- */
-static char *
-get_child_node_value (RestXmlNode *node, const char *name)
-{
-  RestXmlNode *subnode;
-
-  if (!node || !name)
-    return NULL;
-
-  subnode = rest_xml_node_find (node, name);
-  if (!subnode)
-    return NULL;
-
-  if (subnode->content && subnode->content[0])
-    return g_strdup (subnode->content);
-  else
-    return NULL;
-}
-
 static char *
 get_author_icon_url (SwYoutubeItemView *youtube, const char *author)
 {
@@ -255,7 +194,7 @@ get_author_icon_url (SwYoutubeItemView *youtube, const char *author)
   rest_proxy_call_set_function (call, function);
   rest_proxy_call_sync (call, NULL);
 
-  root = node_from_call (call);
+  root = xml_node_from_call (call, "Youtube");
   if (!root)
     return NULL;
 
@@ -314,15 +253,15 @@ make_item (SwYoutubeItemView *item_view,
   </rss>
   */
 
-  sw_item_put (item, "id", get_child_node_value (node, "guid"));
+  sw_item_put (item, "id", xml_get_child_node_value (node, "guid"));
 
-  date = get_child_node_value (node, "atom:updated");
+  date = xml_get_child_node_value (node, "atom:updated");
   if (date != NULL)
     sw_item_put (item, "date", get_utc_date(date));
 
-  sw_item_put (item, "title", get_child_node_value (node, "title"));
-  sw_item_put (item, "url", get_child_node_value (node, "link"));
-  author = get_child_node_value (node, "author");
+  sw_item_put (item, "title", xml_get_child_node_value (node, "title"));
+  sw_item_put (item, "url", xml_get_child_node_value (node, "link"));
+  author = xml_get_child_node_value (node, "author");
   sw_item_put (item, "author", author);
 
   /* media:group */
@@ -357,7 +296,7 @@ _got_videos_cb (RestProxyCall *call,
     return;
   }
 
-  root = node_from_call (call);
+  root = xml_node_from_call (call, "Youtube");
   if (!root)
     return;
 
