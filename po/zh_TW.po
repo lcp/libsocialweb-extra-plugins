@@ -68,7 +68,7 @@ msgstr "代碼："
 
 #: ../services/plurk/plurk.keys.in.h:1
 msgid "Plurk"
-msgstr ""
+msgstr "噗浪"
 
 #: ../services/plurk/plurk.keys.in.h:2
 msgid "Plurk is a web site that allows people to share ideas."
@@ -76,7 +76,7 @@ msgstr ""
 
 #: ../services/sina/sina.keys.in.h:1
 msgid "Sina"
-msgstr ""
+msgstr "新浪微博"
 
 #: ../services/sina/sina.keys.in.h:2
 msgid "Sina microblogging"
@@ -84,7 +84,7 @@ msgstr ""
 
 #: ../services/youtube/youtube.keys.in.h:1
 msgid "Youtube"
-msgstr ""
+msgstr "Youtube"
 
 #: ../services/youtube/youtube.keys.in.h:2
 msgid "Youtube is a popular video sharing website"
