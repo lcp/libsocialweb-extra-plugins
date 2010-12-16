@@ -3,17 +3,70 @@
 # This file is distributed under the same license as the PACKAGE package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
+#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: libsocialweb extra plugins\n"
+"Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2010-11-01 11:06+0800\n"
-"PO-Revision-Date: 2010-11-01 11:10+0800\n"
-"Last-Translator: Gary Ching-Pang Lin <glin@novell.com>\n"
-"Language-Team: /n <glin@novell.com>\n"
+"POT-Creation-Date: 2010-12-16 14:31+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:112 ../bisho/sina/sina.c:94
+msgid "You don't seem to have a network connection, this won't work."
+msgstr "You don't seem to have a network connection, this won't work."
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:113 ../bisho/sina/sina.c:95
+msgid "You could check that the computer's clock is correct."
+msgstr "You could check that the computer's clock is correct."
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:114 ../bisho/sina/sina.c:96
+msgid "You could try again."
+msgstr "You could try again."
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:348 ../bisho/sina/sina.c:312
+msgid "Log me in"
+msgstr "Log me in"
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:352 ../bisho/sina/sina.c:316
+msgid "Connecting..."
+msgstr "Connecting..."
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:361 ../bisho/sina/sina.c:325
+#, c-format
+msgid "Once you have logged in to %s, press Continue."
+msgstr "Once you have logged in to %s, press Continue."
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:366
+#: ../bisho/oauth-webkit/oauth-webkit.c:383 ../bisho/sina/sina.c:330
+#: ../bisho/sina/sina.c:347
+msgid "Continue"
+msgstr "Continue"
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:378 ../bisho/sina/sina.c:342
+#, c-format
+msgid ""
+"Once you have logged in to %s, enter the code they give you and press "
+"Continue."
+msgstr ""
+"Once you have logged in to %s, enter the code they give you and press "
+"Continue."
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:388 ../bisho/sina/sina.c:352
+msgid "Log in succeeded. You'll see new items in a couple of minutes."
+msgstr "Log in succeeded. You'll see new items in a couple of minutes."
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:390 ../bisho/sina/sina.c:354
+msgid "Log me out"
+msgstr "Log me out"
+
+#: ../bisho/oauth-webkit/oauth-webkit.c:487 ../bisho/sina/sina.c:451
+msgid "Code:"
+msgstr "Code:"
 
 #: ../services/plurk/plurk.keys.in.h:1
 msgid "Plurk"
@@ -28,8 +81,8 @@ msgid "Sina"
 msgstr "Sina"
 
 #: ../services/sina/sina.keys.in.h:2
-msgid "Sina microblog"
-msgstr "Sina microblog"
+msgid "Sina microblogging"
+msgstr "Sina microblogging"
 
 #: ../services/youtube/youtube.keys.in.h:1
 msgid "Youtube"
@@ -38,3 +91,28 @@ msgstr "Youtube"
 #: ../services/youtube/youtube.keys.in.h:2
 msgid "Youtube is a popular video sharing website"
 msgstr "Youtube is a popular video sharing website"
+
+#: ../services/digg/digg.keys.in.h:1
+msgid "Digg"
+msgstr "Digg"
+
+#: ../services/digg/digg.keys.in.h:2
+msgid "Digg - to share news, video and images"
+msgstr "Digg - to share news, video and images"
+
+#: ../services/myspace/myspace.keys.in.h:1
+msgid "MySpace"
+msgstr "MySpace"
+
+#: ../services/myspace/myspace.keys.in.h:2
+msgid ""
+"MySpace is a leading social portal for connecting people, content, and "
+"culture from around the world. Create a profile, share photos, professional "
+"and viral videos, blog, instant message your friends, and listen to music on "
+"the world’s largest music community."
+msgstr ""
+"MySpace is a leading social portal for connecting people, content, and "
+"culture from around the world. Create a profile, share photos, professional "
+"and viral videos, blog, instant message your friends, and listen to music on "
+"the world’s largest music community."
+
