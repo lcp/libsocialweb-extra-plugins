@@ -34,6 +34,8 @@
 #include <libsocialweb/sw-item.h>
 #include <libsocialweb/sw-cache.h>
 
+#include "utils.h"
+
 #include "sina-item-view.h"
 
 G_DEFINE_TYPE (SwSinaItemView,
@@ -162,61 +164,6 @@ sw_sina_item_view_finalize (GObject *object)
   G_OBJECT_CLASS (sw_sina_item_view_parent_class)->finalize (object);
 }
 
-static RestXmlNode *
-node_from_call (RestProxyCall *call)
-{
-  static RestXmlParser *parser = NULL;
-  RestXmlNode *root;
-
-  if (call == NULL)
-    return NULL;
-
-  if (parser == NULL)
-    parser = rest_xml_parser_new ();
-
-  if (!SOUP_STATUS_IS_SUCCESSFUL (rest_proxy_call_get_status_code (call))) {
-    g_message ("Error from Sina: %s (%d)",
-               rest_proxy_call_get_status_message (call),
-               rest_proxy_call_get_status_code (call));
-    return NULL;
-  }
-
-  root = rest_xml_parser_parse_from_data (parser,
-                                          rest_proxy_call_get_payload (call),
-                                          rest_proxy_call_get_payload_length (call));
-
-  if (root == NULL) {
-    g_message ("Error from Sina: %s",
-               rest_proxy_call_get_payload (call));
-    return NULL;
-  }
-
-  return root;
-}
-
-/*
- * For a given parent @node, get the child node called @name and return a copy
- * of the content, or NULL. If the content is the empty string, NULL is
- * returned.
- */
-static char *
-get_child_node_value (RestXmlNode *node, const char *name)
-{
-  RestXmlNode *subnode;
-
-  g_assert (node);
-  g_assert (name);
-
-  subnode = rest_xml_node_find (node, name);
-  if (!subnode)
-    return NULL;
-
-  if (subnode->content && subnode->content[0])
-    return g_strdup (subnode->content);
-  else
-    return NULL;
-}
-
 static char*
 make_date (const char *s)
 {
@@ -247,27 +194,27 @@ _populate_set_from_node (SwService   *service,
     user = rest_xml_node_find (node, "user");
 
     id = g_strconcat ("sina-",
-                      get_child_node_value (node, "id"),
+                      xml_get_child_node_value (node, "id"),
                       NULL);
     sw_item_take (item, "id", id);
 
-    date = get_child_node_value (node, "created_at");
+    date = xml_get_child_node_value (node, "created_at");
     sw_item_take (item, "date", make_date (date));
     g_free (date);
 
     sw_item_take (item,
                   "author",
-                  get_child_node_value (user, "screen_name"));
+                  xml_get_child_node_value (user, "screen_name"));
 
-    url = get_child_node_value (user, "profile_image_url");
+    url = xml_get_child_node_value (user, "profile_image_url");
     sw_item_request_image_fetch (item, FALSE, "authoricon", url);
     g_free (url);
 
     sw_item_take (item,
                   "content",
-                  get_child_node_value (node, "text"));
+                  xml_get_child_node_value (node, "text"));
 
-    uid = get_child_node_value (user, "id");
+    uid = xml_get_child_node_value (user, "id");
     url = g_strconcat ("http://t.sina.com.cn/", uid, NULL);
     sw_item_take (item, "url", url);
     g_free (uid);
@@ -303,7 +250,7 @@ _got_user_status_cb (RestProxyCall *call,
 
   service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
-  root = node_from_call (call);
+  root = xml_node_from_call (call, "Sina");
   _populate_set_from_node (service, set, root);
   rest_xml_node_unref (root);
 
@@ -338,7 +285,7 @@ _got_friends_status_cb (RestProxyCall *call,
 
   service = sw_item_view_get_service (SW_ITEM_VIEW (item_view));
 
-  root = node_from_call (call);
+  root = xml_node_from_call (call, "sina");
   _populate_set_from_node (service, set, root);
   rest_xml_node_unref (root);
 
