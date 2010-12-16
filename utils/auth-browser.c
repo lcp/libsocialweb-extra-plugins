@@ -105,7 +105,7 @@ g_print ("%s\n", uri);
 
   if (g_str_has_prefix (uri, priv->stop_url)) {
     webkit_web_view_stop_loading (page);
-    gtk_widget_hide (GTK_WIDGET (priv->window));
+    auth_browser_hide (browser);
     if (priv->callback)
       priv->callback (priv->data, uri);
   }
